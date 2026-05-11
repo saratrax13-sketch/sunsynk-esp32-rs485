@@ -80,7 +80,7 @@ wifi:
     dns1: !secret network_dns1
   ap:
     ssid: "Sunsynk Fallback Hotspot"
-    password: !secret fallback_ap_password
+    password: !secret fallback_ap_password_ss
 
 # MQTT publishing is enabled in addition to the native Home Assistant API.
 mqtt:
