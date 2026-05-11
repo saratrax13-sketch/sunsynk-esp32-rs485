@@ -64,6 +64,8 @@ Slower-changing values use `skip_updates`:
 | `skip_updates: 59` | 5 minutes |
 | `skip_updates: 119` | 10 minutes |
 
+Modbus is serial, so the values are read one after another. Dashboard values can therefore be a few seconds apart during one full scan.
+
 ## Important MQTT Note
 
 ESPHome MQTT switch state messages can be retained by default. Retained MQTT switch state caused Home Assistant to show old switch states being replayed after reconnects.
@@ -139,25 +141,15 @@ Full T568B order:
 | 7 | White/Brown |
 | 8 | Brown |
 
-## Board Pin Notes
+## Board Pinout Layouts
 
-This configuration was written around GPIO labels, so the important part is that your board exposes GPIO16, GPIO17, GPIO18, GND, and power.
+This configuration is written around GPIO labels. Always confirm the silk-screen on your exact board before wiring, because clone boards can move physical header positions.
 
 ### ESP32-WROOM-32E DevKitC V4, 38-pin
 
 This is the Espressif ESP32-DevKitC V4 style board fitted with an ESP32-WROOM-32E module.
 
-Relevant pins:
-
-| Function in YAML | GPIO | Common DevKitC label | Notes |
-| --- | --- | --- | --- |
-| UART TX to RS485 | GPIO16 | IO16 | Available on ESP32-WROOM/ESP32-SOLO DevKitC boards |
-| UART RX from RS485 | GPIO17 | IO17 | Available on ESP32-WROOM/ESP32-SOLO DevKitC boards |
-| RS485 flow control | GPIO18 | IO18 | Used to control DE/RE |
-| Ground | GND | GND | Common ground |
-| Power | 3V3 or 5V | 3V3 / 5V | Match your RS485 module |
-
-The included YAML uses:
+The YAML uses:
 
 ```yaml
 esp32:
@@ -166,30 +158,133 @@ esp32:
     type: esp-idf
 ```
 
+Typical 38-pin DevKitC-style header layout:
+
+| Left header, top to bottom | Notes |
+| --- | --- |
+| 3V3 | 3.3 V output |
+| EN | Enable/reset |
+| VP / GPIO36 | Input-only ADC |
+| VN / GPIO39 | Input-only ADC |
+| GPIO34 | Input-only ADC |
+| GPIO35 | Input-only ADC |
+| GPIO32 | GPIO/ADC |
+| GPIO33 | GPIO/ADC |
+| GPIO25 | GPIO/DAC |
+| GPIO26 | GPIO/DAC |
+| GPIO27 | GPIO |
+| GPIO14 | GPIO |
+| GPIO12 | GPIO, strapping pin |
+| GND | Ground |
+| GPIO13 | GPIO |
+| GPIO9 / SD2 | Flash pin on many boards, avoid |
+| GPIO10 / SD3 | Flash pin on many boards, avoid |
+| GPIO11 / CMD | Flash pin on many boards, avoid |
+| 5V / VIN | 5 V input/output depending on board |
+
+| Right header, top to bottom | Notes |
+| --- | --- |
+| GND | Ground |
+| GPIO23 | GPIO / VSPI MOSI |
+| GPIO22 | GPIO / I2C SCL commonly used |
+| TX0 / GPIO1 | USB serial TX |
+| RX0 / GPIO3 | USB serial RX |
+| GPIO21 | GPIO / I2C SDA commonly used |
+| GND | Ground |
+| GPIO19 | GPIO / VSPI MISO |
+| GPIO18 | RS485 flow control in this project |
+| GPIO5 | GPIO / strapping pin |
+| GPIO17 | RS485 RX in this project |
+| GPIO16 | RS485 TX in this project |
+| GPIO4 | GPIO |
+| GPIO0 | Boot/strapping pin |
+| GPIO2 | GPIO / strapping pin |
+| GPIO15 | GPIO / strapping pin |
+| GPIO8 / SD1 | Flash pin on many boards, avoid |
+| GPIO7 / SD0 | Flash pin on many boards, avoid |
+| GPIO6 / CLK | Flash pin on many boards, avoid |
+
+Project wiring on this board:
+
+| Project function | GPIO | Common label |
+| --- | --- | --- |
+| UART TX to RS485 | GPIO16 | IO16 |
+| UART RX from RS485 | GPIO17 | IO17 |
+| RS485 DE/RE flow control | GPIO18 | IO18 |
+| Ground | GND | GND |
+| Power to RS485 board | 3V3 or 5V | 3V3 / 5V |
+
 ### Ai-Thinker NodeMCU-32-S2 / ESP-12K, 42-pin
 
 This is the Ai-Thinker NodeMCU-32-S2 development board based on the ESP-12K ESP32-S2 module.
-
-Relevant GPIOs:
-
-| Function in YAML | ESP32-S2 GPIO | Notes |
-| --- | --- | --- |
-| UART TX to RS485 | GPIO16 | General-purpose IO on ESP32-S2 |
-| UART RX from RS485 | GPIO17 | General-purpose IO on ESP32-S2 |
-| RS485 flow control | GPIO18 | General-purpose IO on ESP32-S2 |
-| Ground | GND | Common ground |
-| Power | 3V3 or 5V | Match your RS485 module |
 
 If you use the ESP32-S2 board, change the board setting to the correct ESPHome board for your hardware, for example:
 
 ```yaml
 esp32:
   board: nodemcu-32s2
+  variant: esp32s2
   framework:
     type: esp-idf
 ```
 
-Check your exact board silk-screen before wiring. Development boards with the same module can expose pins in different physical positions.
+ESP-12K module pin definition. The development board header order may differ, so use this as the GPIO reference and check the board silk-screen.
+
+| ESP-12K pin | Signal |
+| --- | --- |
+| 1 | GND |
+| 2 | 3V3 |
+| 3 | EN |
+| 4 | GPIO0 |
+| 5 | GPIO1 |
+| 6 | GPIO2 |
+| 7 | GPIO3 |
+| 8 | GPIO4 |
+| 9 | GPIO5 |
+| 10 | GPIO6 |
+| 11 | GPIO7 |
+| 12 | GPIO8 |
+| 13 | GPIO9 |
+| 14 | GPIO10 |
+| 15 | GPIO11 |
+| 16 | GPIO12 |
+| 17 | GPIO13 |
+| 18 | GPIO14 |
+| 19 | GPIO15 |
+| 20 | GPIO16 |
+| 21 | GPIO17 |
+| 22 | GPIO18 |
+| 23 | GPIO19 / USB D- |
+| 24 | GPIO20 / USB D+ |
+| 25 | GPIO21 |
+| 26 | GPIO26 |
+| 27 | GPIO33 |
+| 28 | GPIO34 |
+| 29 | GPIO35 |
+| 30 | GPIO36 |
+| 31 | GPIO37 |
+| 32 | GPIO38 |
+| 33 | GPIO39 |
+| 34 | GPIO40 |
+| 35 | GPIO41 |
+| 36 | GPIO42 |
+| 37 | GPIO43 / U0TXD |
+| 38 | GPIO44 / U0RXD |
+| 39 | GPIO45 |
+| 40 | GPIO46 |
+| 41 | GND |
+| 42 | GND |
+
+Project wiring on this board:
+
+| Project function | ESP32-S2 GPIO | Notes |
+| --- | --- | --- |
+| UART TX to RS485 | GPIO16 | General-purpose IO on ESP32-S2 |
+| UART RX from RS485 | GPIO17 | General-purpose IO on ESP32-S2 |
+| RS485 DE/RE flow control | GPIO18 | General-purpose IO on ESP32-S2 |
+| Native USB | GPIO19/GPIO20 | Keep free if using native USB |
+| Ground | GND | Common ground |
+| Power to RS485 board | 3V3 or 5V | Match your RS485 module |
 
 ## Inverter Settings
 
@@ -209,23 +304,130 @@ modbus_controller:
   address: 1
 ```
 
+## Home Assistant Templates
+
+These templates go in Home Assistant's `configuration.yaml`, normally at:
+
+```text
+/config/configuration.yaml
+```
+
+If you already have a top-level `template:` section, do not create a second one. Merge the `- sensor:` and `- binary_sensor:` blocks into the existing `template:` section.
+
+After saving, go to **Developer Tools > YAML > Check Configuration**. Then reload Template Entities or restart Home Assistant.
+
+What these templates create:
+
+| Entity | Purpose |
+| --- | --- |
+| `sensor.sunsynk_total_pv_power` | Adds PV1 and PV2 power together |
+| `sensor.sunsynk_ups_essential_final` | Clean UPS/essential load value from the inverter UPS register |
+| `sensor.sunsynk_non_essential_final` | Calculates non-essential load as total load minus UPS/essential load |
+| `sensor.sunsynk_home_power_final` | Total home/load power for dashboard cards |
+| `sensor.sunsynk_overall_state_text` | Converts the raw inverter state code into readable text |
+| `binary_sensor.sunsynk_inverter_grid_connected` | Marks grid connected when grid voltage is above 100 V |
+
+Template block:
+
+```yaml
+template:
+  - sensor:
+      - name: "Sunsynk Total PV Power"
+        unique_id: sunsynk_total_pv_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{
+            (
+              states('sensor.sunsynk_inverter_pv1_power') | float(0) +
+              states('sensor.sunsynk_inverter_pv2_power') | float(0)
+            ) | round(0)
+          }}
+
+      - name: "Sunsynk UPS Essential Final"
+        unique_id: sunsynk_ups_essential_final
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{
+            states('sensor.sunsynk_inverter_ups_essential_power') | float(0) | abs | round(0)
+          }}
+
+      - name: "Sunsynk Non Essential Final"
+        unique_id: sunsynk_non_essential_final
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set total = states('sensor.sunsynk_inverter_load_power') | float(0) | abs %}
+          {% set essential = states('sensor.sunsynk_inverter_ups_essential_power') | float(0) | abs %}
+          {{ [total - essential, 0] | max | round(0) }}
+
+      - name: "Sunsynk Home Power Final"
+        unique_id: sunsynk_home_power_final
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{
+            states('sensor.sunsynk_inverter_load_power') | float(0) | abs | round(0)
+          }}
+
+      - name: "Sunsynk Overall State Text"
+        unique_id: sunsynk_overall_state_text
+        state: >
+          {% set raw = states('sensor.sunsynk_inverter_overall_state') %}
+          {% set code = raw | int(base=16, default=0) %}
+          {{ {
+            0: 'Standby',
+            1: 'Self-test',
+            2: 'Normal',
+            3: 'Alarm',
+            4: 'Fault'
+          }.get(code, 'Unknown (' ~ code ~ ')') }}
+
+  - binary_sensor:
+      - name: "Sunsynk Inverter Grid Connected"
+        unique_id: sunsynk_inverter_grid_connected
+        device_class: connectivity
+        state: >
+          {{ states('sensor.sunsynk_inverter_grid_voltage') | float(0) > 100 }}
+```
+
+## Dashboard Cards
+
+Two dashboard examples are included:
+
+| File | Card type | Notes |
+| --- | --- | --- |
+| `dashboard-cards/sunsynk-power-flow-card.yaml` | `custom:sunsynk-power-flow-card` | Best for a Sunsynk-style detailed inverter diagram |
+| `dashboard-cards/power-flow-card-plus.yaml` | `custom:power-flow-card-plus` | Simpler generic power-flow card |
+
+Install the matching custom card through HACS before pasting the YAML into a Lovelace dashboard. If Home Assistant adds `_2` to any entity ID, update the card YAML to match your actual entity IDs.
+
 ## Files
 
 | File | Purpose |
 | --- | --- |
 | `sunsynk-inverter.yaml` | Main ESPHome configuration |
 | `secrets.example.yaml` | Example ESPHome secrets file |
+| `dashboard-cards/sunsynk-power-flow-card.yaml` | Detailed Sunsynk dashboard card example |
+| `dashboard-cards/power-flow-card-plus.yaml` | Generic power-flow dashboard card example |
 | `.gitignore` | Prevents local secrets/build files being committed |
 
 ## Setup
 
 1. Copy `sunsynk-inverter.yaml` into ESPHome.
 2. Create a `secrets.yaml` based on `secrets.example.yaml`.
-3. Update Wi-Fi, MQTT, API, OTA, and web server secrets.
+3. Update Wi-Fi, MQTT, API, OTA, fallback AP, static IP, and web server secrets.
 4. Update the static IP secrets or remove the `manual_ip` block from the YAML.
 5. Check your board type and GPIO wiring.
 6. Compile and flash from ESPHome Builder.
-7. Watch logs for sane values.
+7. Add the Home Assistant templates from this README to `configuration.yaml`.
+8. Add one of the dashboard cards from `dashboard-cards`.
+9. Watch logs for sane values.
 
 Useful log checks:
 
@@ -250,3 +452,5 @@ Useful log checks:
   - https://documentation.espressif.com/esp32-s2_datasheet_en.html
   - https://docs.ai-thinker.com/_media/esp32/docs/esp-12k_%E8%A7%84%E6%A0%BC%E4%B9%A6_en.pdf
 - ESPHome Modbus controller documentation: https://esphome.io/components/modbus_controller
+- Sunsynk Power Flow Card: https://github.com/slipx06/sunsynk-power-flow-card
+- Power Flow Card Plus: https://github.com/flixlix/power-flow-card-plus

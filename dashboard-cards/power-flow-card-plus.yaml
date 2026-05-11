@@ -1,0 +1,36 @@
+type: custom:power-flow-card-plus
+title: Sunsynk Power Flow
+entities:
+  grid:
+    entity: sensor.sunsynk_inverter_grid_ct_power
+    invert_state: false
+  solar:
+    entity: sensor.sunsynk_total_pv_power
+  battery:
+    entity: sensor.sunsynk_inverter_battery_power
+    state_of_charge: sensor.sunsynk_inverter_battery_soc
+    invert_state: false
+  home:
+    entity: sensor.sunsynk_home_power_final
+    override_state: true
+  individual:
+    - entity: sensor.sunsynk_ups_essential_final
+      name: Essential
+      icon: mdi:home-lightning-bolt
+      display_zero: true
+    - entity: sensor.sunsynk_non_essential_final
+      name: Non-essential
+      icon: mdi:home-alert
+      display_zero: true
+    - entity: sensor.sunsynk_inverter_generator_power
+      name: Generator
+      icon: mdi:engine
+      display_zero: false
+clickable_entities: true
+display_zero_lines: true
+use_new_flow_rate_model: true
+min_flow_rate: 0.75
+max_flow_rate: 6
+max_expected_power: 8000
+base_decimals: 0
+kilo_decimals: 2
