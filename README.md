@@ -49,14 +49,16 @@ This inverter behaved badly when ESPHome grouped too many nearby Modbus register
 
 To make reads stable, this version uses `force_new_range: true` broadly. That makes ESPHome read most items in separate requests. It is slower, but it avoids corrupt grouped reads.
 
-v4.1 also slows the RS485 request pacing because the inverter still showed shifted/corrupt values with faster request spacing.
+v4.7 uses a faster 5s scan interval with stable 750ms RS485 request spacing. Earlier tests showed that 600ms could bring back shifted/corrupt values, while very conservative v4.2 timing was too slow in live use. It also filters impossible live values so dashboards keep the last valid reading instead of publishing corrupt spikes.
+
+The generator/AUX power sensor uses a consecutive-sample confirmation filter. This lets a real generator appear automatically once it produces sustained valid power, while one-off shifted Modbus values are ignored when no generator is connected.
 
 The current Modbus timing is controlled near the top of the YAML:
 
 ```yaml
-modbus_update_interval: 10s
-modbus_command_throttle: 500ms
-modbus_send_wait_time: 500ms
+modbus_update_interval: 5s
+modbus_command_throttle: 750ms
+modbus_send_wait_time: 750ms
 ```
 
 Slower-changing values use `skip_updates`:
@@ -423,7 +425,7 @@ Install the matching custom card through HACS before pasting the YAML into a Lov
 
 | File | Purpose |
 | --- | --- |
-| `sunsynk-inverter-v4.yaml` | Main ESPHome configuration |
+| `sunsynk-inverter-v4.7.yaml` | Main ESPHome configuration |
 | `secrets.example.yaml` | Example ESPHome secrets file |
 | `dashboard-cards/sunsynk-power-flow-card.yaml` | Detailed Sunsynk dashboard card example |
 | `dashboard-cards/power-flow-card-plus.yaml` | Generic power-flow dashboard card example |
@@ -431,7 +433,7 @@ Install the matching custom card through HACS before pasting the YAML into a Lov
 
 ## Setup
 
-1. Copy `sunsynk-inverter-v4.yaml` into ESPHome.
+1. Copy `sunsynk-inverter-v4.7.yaml` into ESPHome.
 2. Create a `secrets.yaml` based on `secrets.example.yaml`.
 3. Update Wi-Fi, MQTT, API, OTA, fallback AP, static IP, and web server secrets.
 4. Update the static IP secrets or remove the `manual_ip` block from the YAML.
