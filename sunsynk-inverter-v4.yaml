@@ -1,0 +1,1767 @@
+﻿substitutions:
+  device_name: sunsynk-inverter
+  friendly_name: Sunsynk Inverter
+  tx_pin: GPIO16
+  rx_pin: GPIO17
+  flow_control_pin: GPIO18
+  generator_min_valid_power_w: "1600"
+
+# File version: v4 - isolated reads
+# Date updated: 2026-05-11
+#
+# Why this version exists:
+# - Earlier versions could read and write, but grouped Modbus range reads sometimes
+#   returned shifted/corrupt values on this inverter.
+# - v4 keeps the working write fix: use_write_multiple: true on writable registers.
+# - v4 keeps decimal display improvements: accuracy_decimals: 2 on voltage/current/
+#   frequency/energy sensors where useful.
+# - v4 uses force_new_range: true very broadly so most Modbus values are read in
+#   separate requests. This is a little slower, but it stopped values being applied
+#   to the wrong sensors.
+# - MQTT keepalive was reduced to 15s so disconnects are detected faster.
+# - MQTT reboot_timeout is set to 0s so the ESP32 does not reboot just because
+#   MQTT disconnects.
+# - MQTT retain is explicitly disabled on writable switches/selects/numbers.
+#   Retained writable state messages can be replayed by MQTT/Home Assistant
+#   after reconnects and look like real changes.
+#
+# Polling notes:
+# - The main Modbus controller update_interval is 5s.
+# - No skip_updates means the item is checked every scan, roughly every 5s.
+# - skip_updates: 11 means the item updates every 12 scans, roughly 60s.
+# - skip_updates: 59 means roughly every 5 minutes.
+# - skip_updates: 119 means roughly every 10 minutes.
+# - Modbus is serial, so values update one after another, not all at exactly the
+#   same instant.
+
+# ESPHome node identity shown in ESPHome Builder and Home Assistant.
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+# ESP32 board and framework choice.
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+# Logging levels. Modbus internals are kept quiet unless troubleshooting is needed.
+logger:
+  level: INFO
+  logs:
+    modbus: ERROR
+    modbus_controller: ERROR
+    mqtt: ERROR
+    api: ERROR
+    sensor: INFO
+    number: INFO
+    select: INFO
+    text_sensor: INFO
+
+# Native Home Assistant API connection.
+api:
+  encryption:
+    key: !secret sunsynk_api_encryption_key
+
+# OTA lets ESPHome update the ESP32 over Wi-Fi after the first flash.
+ota:
+  - platform: esphome
+    password: !secret sunsynk_ota_password
+
+# Wi-Fi connection. The static IP makes the inverter bridge easy to find.
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  power_save_mode: none
+  manual_ip:
+    static_ip: !secret device_static_ip
+    gateway: !secret network_gateway
+    subnet: !secret network_subnet
+    dns1: !secret network_dns1
+  ap:
+    ssid: "Sunsynk Fallback Hotspot"
+    password: !secret fallback_ap_password_ss
+
+# MQTT publishing is enabled in addition to the native Home Assistant API.
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  port: !secret mqtt_port
+  topic_prefix: sunsynk_inverter
+  keepalive: 15s        # detect disconnections faster (default is 60s)
+  reboot_timeout: 0s    # do NOT reboot the ESP on MQTT disconnect; prevents false state changes
+
+# Small web page on the ESP32 for quick local status checks.
+web_server:
+  port: 80
+  auth:
+    username: !secret web_server_username
+    password: !secret web_server_password
+
+# UART wiring from ESP32 to the RS485 converter.
+# GPIO16 = TX from ESP32 to converter, GPIO17 = RX from converter to ESP32.
+uart:
+  - id: mod_uart
+    tx_pin: ${tx_pin}
+    rx_pin: ${rx_pin}
+    baud_rate: 9600
+    stop_bits: 1
+    rx_buffer_size: 512
+
+# RS485/Modbus bus settings.
+# flow_control_pin controls DE/RE on the RS485 adapter so the ESP32 can switch
+# between transmit and receive.
+modbus:
+  - id: modbus1
+    uart_id: mod_uart
+    flow_control_pin: ${flow_control_pin}
+    send_wait_time: 250ms
+
+# Sunsynk inverter Modbus slave.
+# address: 1 must match the inverter Modbus ID.
+# command_throttle spaces requests apart to avoid overrunning the inverter.
+modbus_controller:
+  - id: sunsynk
+    address: 1
+    modbus_id: modbus1
+    setup_priority: -10
+    update_interval: 5s
+    command_throttle: 200ms
+    offline_skip_updates: 3
+
+# Sensors below are mostly Modbus holding-register reads.
+# force_new_range: true is intentionally used broadly in v4 to isolate reads and
+# avoid byte-shift/corrupt grouped reads on this inverter.
+sensor:
+  # ESP32 diagnostics. These do not use RS485 and do not affect inverter polling.
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+    entity_category: diagnostic
+    disabled_by_default: true
+
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+    entity_category: diagnostic
+    disabled_by_default: true
+
+  # Battery live values.
+  # SOC is percent. Power is W: positive means discharging, negative means charging.
+  # Voltage/current use scaling filters and publish two decimals.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery SOC"
+    id: battery_soc
+    address: 184
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "%"
+    device_class: battery
+    state_class: measurement
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Power"
+    id: battery_power
+    address: 190
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Voltage"
+    address: 183
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.01
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Current"
+    address: 191
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.01
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Temperature"
+    address: 182
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "Â°C"
+    device_class: temperature
+    state_class: measurement
+    skip_updates: 11
+    filters:
+      - multiply: 0.1
+      - offset: -100.0
+
+  # Solar PV live values.
+  # PV1/PV2 power are read directly; voltage/current use 0.1 scaling.
+  # Total Solar Power later adds PV1 + PV2 for dashboard cards.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "PV1 Power"
+    id: pv1_power
+    address: 186
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "PV2 Power"
+    id: pv2_power
+    address: 187
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "PV1 Voltage"
+    address: 109
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "PV1 Current"
+    address: 110
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "PV2 Voltage"
+    address: 111
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "PV2 Current"
+    address: 112
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  # Grid live values.
+  # Grid CT Power is the main CT reading. Grid L1 Power is kept because
+  # the Sunsynk power-flow card may use it better for the grid branch on this model.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid Voltage"
+    address: 150
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid Current"
+    address: 160
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.01
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid Frequency"
+    address: 79
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 11
+    filters:
+      - multiply: 0.01
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid L1 Power"
+    address: 167
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid Power"
+    id: grid_power
+    address: 169
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid CT Power"
+    id: grid_ct_power
+    address: 172
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+
+  # Inverter AC output values.
+  # These describe what the inverter is doing on the AC/output side.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Inverter Power"
+    id: inverter_power
+    address: 175
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Inverter Voltage"
+    address: 154
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Inverter Current"
+    address: 164
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.01
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Inverter Frequency"
+    address: 193
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 11
+    filters:
+      - multiply: 0.01
+
+  # Load values.
+  # Load Power is the total inverter load register.
+  # UPS Essential Power is the separate essential/UPS output register found
+  # by comparing debug registers against the inverter screen.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Load Power"
+    id: load_power
+    address: 178
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "UPS Essential Power"
+    id: ups_essential_power
+    address: 179
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 2
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Load Frequency"
+    address: 192
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 11
+    filters:
+      - multiply: 0.01
+
+  # Generator / AUX port live value.
+  # AUX port is configured as GEN INPUT on this inverter.
+  # Reg 166 only shows valid power when a generator is actually running.
+  # In v4 this register is isolated from neighbouring reads. The lambda hides
+  # small/invalid idle readings and only shows meaningful generator power.
+  # Adjust generator_min_valid_power_w in substitutions if your generator has a
+  # different realistic minimum output.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Generator Power"
+    id: gen_power
+    address: 166
+    force_new_range: true
+    register_type: holding
+    value_type: S_WORD
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    filters:
+      - lambda: "return x < ${generator_min_valid_power_w}.0f ? 0.0f : x;"
+
+  # Calculated: Total Solar Power.
+  # Sum of both PV strings - useful for dashboard display.
+  - platform: template
+    name: "Total Solar Power"
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    update_interval: 5s
+    lambda: |-
+      if (isnan(id(pv1_power).state) || isnan(id(pv2_power).state))
+        return {};
+      return id(pv1_power).state + id(pv2_power).state;
+
+  # Calculated: Essential Load Power.
+  # Reg 175 mirrors Grid CT on this firmware, so it cannot be used.
+  # Energy balance: solar + battery_net + grid_port_power = essential load.
+  # grid_power (reg 169) is negative when exporting, positive when importing.
+  # battery_power (reg 190) is positive when discharging, negative when charging.
+  - platform: template
+    name: "Essential Load Power"
+    id: essential_load_power
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    update_interval: 5s
+    lambda: |-
+      if (isnan(id(pv1_power).state) || isnan(id(pv2_power).state) ||
+          isnan(id(battery_power).state) || isnan(id(grid_power).state))
+        return {};
+      float essential = id(pv1_power).state + id(pv2_power).state +
+                        id(battery_power).state + id(grid_power).state;
+      return essential > 0.0f ? essential : 0.0f;
+
+  # Temperatures.
+  # These are slow-changing, so skip_updates: 11 polls them roughly once a minute.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "DC Transformer Temperature"
+    address: 90
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "Â°C"
+    device_class: temperature
+    state_class: measurement
+    skip_updates: 11
+    filters:
+      - multiply: 0.1
+      - offset: -100.0
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Radiator Temperature"
+    address: 91
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "Â°C"
+    device_class: temperature
+    state_class: measurement
+    skip_updates: 11
+    filters:
+      - multiply: 0.1
+      - offset: -100.0
+
+  # Daily energy totals.
+  # These are cumulative kWh counters for today and do not need 5s polling.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Day PV Energy"
+    address: 108
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    skip_updates: 11
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Day Battery Charge"
+    address: 70
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    skip_updates: 11
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Day Battery Discharge"
+    address: 71
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    skip_updates: 11
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Day Grid Import"
+    address: 76
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    skip_updates: 11
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Day Grid Export"
+    address: 77
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    skip_updates: 11
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Day Load Energy"
+    address: 84
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    skip_updates: 11
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.1
+
+  # Overall state code.
+  # 2 normally means Normal; Home Assistant can map this to friendly text.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Overall State Code"
+    address: 59
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    skip_updates: 11
+
+# Text sensor version of the inverter state.
+# This reads the same state register as Overall State Code, but keeps the raw
+# HEXBYTES string for dashboards/debugging.
+text_sensor:
+  # ESPHome firmware version. Diagnostic only; does not use RS485.
+  - platform: version
+    name: "ESPHome Version"
+    entity_category: diagnostic
+    disabled_by_default: true
+
+  # Connected Wi-Fi details. Diagnostic only; does not use RS485.
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+      entity_category: diagnostic
+    ssid:
+      name: "Connected SSID"
+      entity_category: diagnostic
+      disabled_by_default: true
+    mac_address:
+      name: "MAC Address"
+      entity_category: diagnostic
+      disabled_by_default: true
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Overall State"
+    address: 59
+    force_new_range: true
+    register_type: holding
+    raw_encode: HEXBYTES
+    response_size: 2
+    skip_updates: 11
+
+# Binary status sensors.
+# Grid Connected reads register 194 bit 0. It is slower than live power values
+# because grid status does not need second-by-second updates.
+binary_sensor:
+  # ESPHome connection status. Diagnostic only; does not use RS485.
+  - platform: status
+    name: "ESP Status"
+    entity_category: diagnostic
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid Connected"
+    address: 194
+    force_new_range: true
+    register_type: holding
+    bitmask: 0x1
+    skip_updates: 5
+
+# Writable inverter settings represented as Home Assistant switches.
+# use_write_multiple: true is important for this Sunsynk setup; without it the
+# inverter could be read successfully but writes were unreliable.
+switch:
+  # Main inverter settings. These only change when a user changes them, so
+  # skip_updates: 59 polls them roughly every 5 minutes.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Solar Export"
+    address: 247
+    force_new_range: true
+    register_type: holding
+    bitmask: 0x1
+    use_write_multiple: true
+    skip_updates: 59
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Use Timer"
+    address: 248
+    force_new_range: true
+    register_type: holding
+    bitmask: 0x1
+    use_write_multiple: true
+    skip_updates: 59
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Priority Load"
+    address: 243
+    force_new_range: true
+    register_type: holding
+    bitmask: 0x1
+    use_write_multiple: true
+    skip_updates: 59
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid Charge Enabled"
+    address: 232
+    force_new_range: true
+    register_type: holding
+    bitmask: 0x1
+    use_write_multiple: true
+    skip_updates: 59
+    retain: false
+
+# Writable inverter settings represented as dropdowns.
+# Do not add register_type here; ESPHome select/modbus_controller does not accept
+# it. use_write_multiple is kept for reliable writes.
+select:
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Load Limit"
+    address: 244
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 59
+    retain: false
+    optionsmap:
+      "Allow Export": 0
+      "Essentials": 1
+      "Zero Export": 2
+
+  # Program charge selects. These are the charge-source settings for each timer
+  # slot. skip_updates: 119 polls them roughly every 10 minutes.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog1 Charge"
+    address: 274
+    value_type: U_WORD
+    use_write_multiple: true
+    force_new_range: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "No Grid or Gen": 0
+      "Allow Grid": 1
+      "Allow Gen": 2
+      "Allow Grid & Gen": 3
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog2 Charge"
+    address: 275
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "No Grid or Gen": 0
+      "Allow Grid": 1
+      "Allow Gen": 2
+      "Allow Grid & Gen": 3
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog3 Charge"
+    address: 276
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "No Grid or Gen": 0
+      "Allow Grid": 1
+      "Allow Gen": 2
+      "Allow Grid & Gen": 3
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog4 Charge"
+    address: 277
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "No Grid or Gen": 0
+      "Allow Grid": 1
+      "Allow Gen": 2
+      "Allow Grid & Gen": 3
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog5 Charge"
+    address: 278
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "No Grid or Gen": 0
+      "Allow Grid": 1
+      "Allow Gen": 2
+      "Allow Grid & Gen": 3
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog6 Charge"
+    address: 279
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "No Grid or Gen": 0
+      "Allow Grid": 1
+      "Allow Gen": 2
+      "Allow Grid & Gen": 3
+
+  # Program time selects. The inverter stores time as HHMM-style integers, so
+  # 13:45 is written as 1345. Options are limited to 15-minute intervals.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog1 Time"
+    address: 250
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    force_new_range: true
+    optionsmap:
+      "0:00": 0
+      "0:15": 15
+      "0:30": 30
+      "0:45": 45
+      "1:00": 100
+      "1:15": 115
+      "1:30": 130
+      "1:45": 145
+      "2:00": 200
+      "2:15": 215
+      "2:30": 230
+      "2:45": 245
+      "3:00": 300
+      "3:15": 315
+      "3:30": 330
+      "3:45": 345
+      "4:00": 400
+      "4:15": 415
+      "4:30": 430
+      "4:45": 445
+      "5:00": 500
+      "5:15": 515
+      "5:30": 530
+      "5:45": 545
+      "6:00": 600
+      "6:15": 615
+      "6:30": 630
+      "6:45": 645
+      "7:00": 700
+      "7:15": 715
+      "7:30": 730
+      "7:45": 745
+      "8:00": 800
+      "8:15": 815
+      "8:30": 830
+      "8:45": 845
+      "9:00": 900
+      "9:15": 915
+      "9:30": 930
+      "9:45": 945
+      "10:00": 1000
+      "10:15": 1015
+      "10:30": 1030
+      "10:45": 1045
+      "11:00": 1100
+      "11:15": 1115
+      "11:30": 1130
+      "11:45": 1145
+      "12:00": 1200
+      "12:15": 1215
+      "12:30": 1230
+      "12:45": 1245
+      "13:00": 1300
+      "13:15": 1315
+      "13:30": 1330
+      "13:45": 1345
+      "14:00": 1400
+      "14:15": 1415
+      "14:30": 1430
+      "14:45": 1445
+      "15:00": 1500
+      "15:15": 1515
+      "15:30": 1530
+      "15:45": 1545
+      "16:00": 1600
+      "16:15": 1615
+      "16:30": 1630
+      "16:45": 1645
+      "17:00": 1700
+      "17:15": 1715
+      "17:30": 1730
+      "17:45": 1745
+      "18:00": 1800
+      "18:15": 1815
+      "18:30": 1830
+      "18:45": 1845
+      "19:00": 1900
+      "19:15": 1915
+      "19:30": 1930
+      "19:45": 1945
+      "20:00": 2000
+      "20:15": 2015
+      "20:30": 2030
+      "20:45": 2045
+      "21:00": 2100
+      "21:15": 2115
+      "21:30": 2130
+      "21:45": 2145
+      "22:00": 2200
+      "22:15": 2215
+      "22:30": 2230
+      "22:45": 2245
+      "23:00": 2300
+      "23:15": 2315
+      "23:30": 2330
+      "23:45": 2345
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog2 Time"
+    address: 251
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "0:00": 0
+      "0:15": 15
+      "0:30": 30
+      "0:45": 45
+      "1:00": 100
+      "1:15": 115
+      "1:30": 130
+      "1:45": 145
+      "2:00": 200
+      "2:15": 215
+      "2:30": 230
+      "2:45": 245
+      "3:00": 300
+      "3:15": 315
+      "3:30": 330
+      "3:45": 345
+      "4:00": 400
+      "4:15": 415
+      "4:30": 430
+      "4:45": 445
+      "5:00": 500
+      "5:15": 515
+      "5:30": 530
+      "5:45": 545
+      "6:00": 600
+      "6:15": 615
+      "6:30": 630
+      "6:45": 645
+      "7:00": 700
+      "7:15": 715
+      "7:30": 730
+      "7:45": 745
+      "8:00": 800
+      "8:15": 815
+      "8:30": 830
+      "8:45": 845
+      "9:00": 900
+      "9:15": 915
+      "9:30": 930
+      "9:45": 945
+      "10:00": 1000
+      "10:15": 1015
+      "10:30": 1030
+      "10:45": 1045
+      "11:00": 1100
+      "11:15": 1115
+      "11:30": 1130
+      "11:45": 1145
+      "12:00": 1200
+      "12:15": 1215
+      "12:30": 1230
+      "12:45": 1245
+      "13:00": 1300
+      "13:15": 1315
+      "13:30": 1330
+      "13:45": 1345
+      "14:00": 1400
+      "14:15": 1415
+      "14:30": 1430
+      "14:45": 1445
+      "15:00": 1500
+      "15:15": 1515
+      "15:30": 1530
+      "15:45": 1545
+      "16:00": 1600
+      "16:15": 1615
+      "16:30": 1630
+      "16:45": 1645
+      "17:00": 1700
+      "17:15": 1715
+      "17:30": 1730
+      "17:45": 1745
+      "18:00": 1800
+      "18:15": 1815
+      "18:30": 1830
+      "18:45": 1845
+      "19:00": 1900
+      "19:15": 1915
+      "19:30": 1930
+      "19:45": 1945
+      "20:00": 2000
+      "20:15": 2015
+      "20:30": 2030
+      "20:45": 2045
+      "21:00": 2100
+      "21:15": 2115
+      "21:30": 2130
+      "21:45": 2145
+      "22:00": 2200
+      "22:15": 2215
+      "22:30": 2230
+      "22:45": 2245
+      "23:00": 2300
+      "23:15": 2315
+      "23:30": 2330
+      "23:45": 2345
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog3 Time"
+    address: 252
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "0:00": 0
+      "0:15": 15
+      "0:30": 30
+      "0:45": 45
+      "1:00": 100
+      "1:15": 115
+      "1:30": 130
+      "1:45": 145
+      "2:00": 200
+      "2:15": 215
+      "2:30": 230
+      "2:45": 245
+      "3:00": 300
+      "3:15": 315
+      "3:30": 330
+      "3:45": 345
+      "4:00": 400
+      "4:15": 415
+      "4:30": 430
+      "4:45": 445
+      "5:00": 500
+      "5:15": 515
+      "5:30": 530
+      "5:45": 545
+      "6:00": 600
+      "6:15": 615
+      "6:30": 630
+      "6:45": 645
+      "7:00": 700
+      "7:15": 715
+      "7:30": 730
+      "7:45": 745
+      "8:00": 800
+      "8:15": 815
+      "8:30": 830
+      "8:45": 845
+      "9:00": 900
+      "9:15": 915
+      "9:30": 930
+      "9:45": 945
+      "10:00": 1000
+      "10:15": 1015
+      "10:30": 1030
+      "10:45": 1045
+      "11:00": 1100
+      "11:15": 1115
+      "11:30": 1130
+      "11:45": 1145
+      "12:00": 1200
+      "12:15": 1215
+      "12:30": 1230
+      "12:45": 1245
+      "13:00": 1300
+      "13:15": 1315
+      "13:30": 1330
+      "13:45": 1345
+      "14:00": 1400
+      "14:15": 1415
+      "14:30": 1430
+      "14:45": 1445
+      "15:00": 1500
+      "15:15": 1515
+      "15:30": 1530
+      "15:45": 1545
+      "16:00": 1600
+      "16:15": 1615
+      "16:30": 1630
+      "16:45": 1645
+      "17:00": 1700
+      "17:15": 1715
+      "17:30": 1730
+      "17:45": 1745
+      "18:00": 1800
+      "18:15": 1815
+      "18:30": 1830
+      "18:45": 1845
+      "19:00": 1900
+      "19:15": 1915
+      "19:30": 1930
+      "19:45": 1945
+      "20:00": 2000
+      "20:15": 2015
+      "20:30": 2030
+      "20:45": 2045
+      "21:00": 2100
+      "21:15": 2115
+      "21:30": 2130
+      "21:45": 2145
+      "22:00": 2200
+      "22:15": 2215
+      "22:30": 2230
+      "22:45": 2245
+      "23:00": 2300
+      "23:15": 2315
+      "23:30": 2330
+      "23:45": 2345
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog4 Time"
+    address: 253
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "0:00": 0
+      "0:15": 15
+      "0:30": 30
+      "0:45": 45
+      "1:00": 100
+      "1:15": 115
+      "1:30": 130
+      "1:45": 145
+      "2:00": 200
+      "2:15": 215
+      "2:30": 230
+      "2:45": 245
+      "3:00": 300
+      "3:15": 315
+      "3:30": 330
+      "3:45": 345
+      "4:00": 400
+      "4:15": 415
+      "4:30": 430
+      "4:45": 445
+      "5:00": 500
+      "5:15": 515
+      "5:30": 530
+      "5:45": 545
+      "6:00": 600
+      "6:15": 615
+      "6:30": 630
+      "6:45": 645
+      "7:00": 700
+      "7:15": 715
+      "7:30": 730
+      "7:45": 745
+      "8:00": 800
+      "8:15": 815
+      "8:30": 830
+      "8:45": 845
+      "9:00": 900
+      "9:15": 915
+      "9:30": 930
+      "9:45": 945
+      "10:00": 1000
+      "10:15": 1015
+      "10:30": 1030
+      "10:45": 1045
+      "11:00": 1100
+      "11:15": 1115
+      "11:30": 1130
+      "11:45": 1145
+      "12:00": 1200
+      "12:15": 1215
+      "12:30": 1230
+      "12:45": 1245
+      "13:00": 1300
+      "13:15": 1315
+      "13:30": 1330
+      "13:45": 1345
+      "14:00": 1400
+      "14:15": 1415
+      "14:30": 1430
+      "14:45": 1445
+      "15:00": 1500
+      "15:15": 1515
+      "15:30": 1530
+      "15:45": 1545
+      "16:00": 1600
+      "16:15": 1615
+      "16:30": 1630
+      "16:45": 1645
+      "17:00": 1700
+      "17:15": 1715
+      "17:30": 1730
+      "17:45": 1745
+      "18:00": 1800
+      "18:15": 1815
+      "18:30": 1830
+      "18:45": 1845
+      "19:00": 1900
+      "19:15": 1915
+      "19:30": 1930
+      "19:45": 1945
+      "20:00": 2000
+      "20:15": 2015
+      "20:30": 2030
+      "20:45": 2045
+      "21:00": 2100
+      "21:15": 2115
+      "21:30": 2130
+      "21:45": 2145
+      "22:00": 2200
+      "22:15": 2215
+      "22:30": 2230
+      "22:45": 2245
+      "23:00": 2300
+      "23:15": 2315
+      "23:30": 2330
+      "23:45": 2345
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog5 Time"
+    address: 254
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "0:00": 0
+      "0:15": 15
+      "0:30": 30
+      "0:45": 45
+      "1:00": 100
+      "1:15": 115
+      "1:30": 130
+      "1:45": 145
+      "2:00": 200
+      "2:15": 215
+      "2:30": 230
+      "2:45": 245
+      "3:00": 300
+      "3:15": 315
+      "3:30": 330
+      "3:45": 345
+      "4:00": 400
+      "4:15": 415
+      "4:30": 430
+      "4:45": 445
+      "5:00": 500
+      "5:15": 515
+      "5:30": 530
+      "5:45": 545
+      "6:00": 600
+      "6:15": 615
+      "6:30": 630
+      "6:45": 645
+      "7:00": 700
+      "7:15": 715
+      "7:30": 730
+      "7:45": 745
+      "8:00": 800
+      "8:15": 815
+      "8:30": 830
+      "8:45": 845
+      "9:00": 900
+      "9:15": 915
+      "9:30": 930
+      "9:45": 945
+      "10:00": 1000
+      "10:15": 1015
+      "10:30": 1030
+      "10:45": 1045
+      "11:00": 1100
+      "11:15": 1115
+      "11:30": 1130
+      "11:45": 1145
+      "12:00": 1200
+      "12:15": 1215
+      "12:30": 1230
+      "12:45": 1245
+      "13:00": 1300
+      "13:15": 1315
+      "13:30": 1330
+      "13:45": 1345
+      "14:00": 1400
+      "14:15": 1415
+      "14:30": 1430
+      "14:45": 1445
+      "15:00": 1500
+      "15:15": 1515
+      "15:30": 1530
+      "15:45": 1545
+      "16:00": 1600
+      "16:15": 1615
+      "16:30": 1630
+      "16:45": 1645
+      "17:00": 1700
+      "17:15": 1715
+      "17:30": 1730
+      "17:45": 1745
+      "18:00": 1800
+      "18:15": 1815
+      "18:30": 1830
+      "18:45": 1845
+      "19:00": 1900
+      "19:15": 1915
+      "19:30": 1930
+      "19:45": 1945
+      "20:00": 2000
+      "20:15": 2015
+      "20:30": 2030
+      "20:45": 2045
+      "21:00": 2100
+      "21:15": 2115
+      "21:30": 2130
+      "21:45": 2145
+      "22:00": 2200
+      "22:15": 2215
+      "22:30": 2230
+      "22:45": 2245
+      "23:00": 2300
+      "23:15": 2315
+      "23:30": 2330
+      "23:45": 2345
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog6 Time"
+    address: 255
+    force_new_range: true
+    value_type: U_WORD
+    use_write_multiple: true
+    skip_updates: 119
+    retain: false
+    optionsmap:
+      "0:00": 0
+      "0:15": 15
+      "0:30": 30
+      "0:45": 45
+      "1:00": 100
+      "1:15": 115
+      "1:30": 130
+      "1:45": 145
+      "2:00": 200
+      "2:15": 215
+      "2:30": 230
+      "2:45": 245
+      "3:00": 300
+      "3:15": 315
+      "3:30": 330
+      "3:45": 345
+      "4:00": 400
+      "4:15": 415
+      "4:30": 430
+      "4:45": 445
+      "5:00": 500
+      "5:15": 515
+      "5:30": 530
+      "5:45": 545
+      "6:00": 600
+      "6:15": 615
+      "6:30": 630
+      "6:45": 645
+      "7:00": 700
+      "7:15": 715
+      "7:30": 730
+      "7:45": 745
+      "8:00": 800
+      "8:15": 815
+      "8:30": 830
+      "8:45": 845
+      "9:00": 900
+      "9:15": 915
+      "9:30": 930
+      "9:45": 945
+      "10:00": 1000
+      "10:15": 1015
+      "10:30": 1030
+      "10:45": 1045
+      "11:00": 1100
+      "11:15": 1115
+      "11:30": 1130
+      "11:45": 1145
+      "12:00": 1200
+      "12:15": 1215
+      "12:30": 1230
+      "12:45": 1245
+      "13:00": 1300
+      "13:15": 1315
+      "13:30": 1330
+      "13:45": 1345
+      "14:00": 1400
+      "14:15": 1415
+      "14:30": 1430
+      "14:45": 1445
+      "15:00": 1500
+      "15:15": 1515
+      "15:30": 1530
+      "15:45": 1545
+      "16:00": 1600
+      "16:15": 1615
+      "16:30": 1630
+      "16:45": 1645
+      "17:00": 1700
+      "17:15": 1715
+      "17:30": 1730
+      "17:45": 1745
+      "18:00": 1800
+      "18:15": 1815
+      "18:30": 1830
+      "18:45": 1845
+      "19:00": 1900
+      "19:15": 1915
+      "19:30": 1930
+      "19:45": 1945
+      "20:00": 2000
+      "20:15": 2015
+      "20:30": 2030
+      "20:45": 2045
+      "21:00": 2100
+      "21:15": 2115
+      "21:30": 2130
+      "21:45": 2145
+      "22:00": 2200
+      "22:15": 2215
+      "22:30": 2230
+      "22:45": 2245
+      "23:00": 2300
+      "23:15": 2315
+      "23:30": 2330
+      "23:45": 2345
+
+# Writable numeric inverter settings.
+# These become Home Assistant number sliders/inputs. use_write_multiple keeps
+# writes compatible with the inverter.
+number:
+  # Battery capacity thresholds. Polled roughly every 10 minutes because these
+  # settings rarely change on their own.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Shutdown Capacity"
+    address: 217
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Restart Capacity"
+    address: 218
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Low Capacity"
+    address: 219
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    skip_updates: 119
+    retain: false
+
+  # Program power and capacity values for the six timer slots. These are writable
+  # settings and are polled roughly every 10 minutes.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog1 Power"
+    address: 256
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 8000
+    step: 100
+    unit_of_measurement: "W"
+    skip_updates: 119
+    retain: false
+    force_new_range: true
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog1 Capacity"
+    address: 268
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    skip_updates: 119
+    retain: false
+    force_new_range: true
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog2 Power"
+    address: 257
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 8000
+    step: 100
+    unit_of_measurement: "W"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog2 Capacity"
+    address: 269
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog3 Power"
+    address: 258
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 8000
+    step: 100
+    unit_of_measurement: "W"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog3 Capacity"
+    address: 270
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog4 Power"
+    address: 259
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 8000
+    step: 100
+    unit_of_measurement: "W"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog4 Capacity"
+    address: 271
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog5 Power"
+    address: 260
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 8000
+    step: 100
+    unit_of_measurement: "W"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog5 Capacity"
+    address: 272
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog6 Power"
+    address: 261
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 8000
+    step: 100
+    unit_of_measurement: "W"
+    skip_updates: 119
+    retain: false
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog6 Capacity"
+    address: 273
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    use_write_multiple: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    skip_updates: 119
+    retain: false
+
+# Fallback captive portal used when the ESP cannot connect to Wi-Fi.
+captive_portal:

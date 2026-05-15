@@ -26,6 +26,7 @@ It provides:
 - Generator/AUX power when the AUX port is configured as generator input
 - Daily PV, battery charge/discharge, grid import/export, and load energy totals
 - Inverter state code and raw state text
+- ESP32 diagnostic entities for Wi-Fi/IP/status/firmware version
 - Writable inverter settings:
   - Solar Export
   - Use Timer
@@ -66,24 +67,31 @@ Slower-changing values use `skip_updates`:
 
 Modbus is serial, so the values are read one after another. Dashboard values can therefore be a few seconds apart during one full scan.
 
+Diagnostic Wi-Fi/IP/status/version entities do not use RS485 and do not change the inverter read timing.
+
 ## Important MQTT Note
 
-ESPHome MQTT switch state messages can be retained by default. Retained MQTT switch state caused Home Assistant to show old switch states being replayed after reconnects.
+ESPHome MQTT writable entity state messages can be retained by default. Retained MQTT state caused Home Assistant to show old writable states being replayed after reconnects.
 
-For this reason, writable inverter switches explicitly use:
+For this reason, writable inverter switches, selects, and numbers explicitly use:
 
 ```yaml
 retain: false
 ```
 
-on:
+on the writable inverter controls, including:
 
 - Solar Export
 - Use Timer
 - Priority Load
 - Grid Charge Enabled
+- Load Limit
+- Program charge source settings
+- Program time settings
+- Program power/capacity settings
+- Battery capacity settings
 
-If you previously used retained switch topics, clear the retained MQTT messages from your broker.
+If you previously used retained writable topics, clear the retained MQTT messages from your broker.
 
 ## Hardware Wiring
 
@@ -325,7 +333,7 @@ What these templates create:
 | `sensor.sunsynk_non_essential_final` | Calculates non-essential load as total load minus UPS/essential load |
 | `sensor.sunsynk_home_power_final` | Total home/load power for dashboard cards |
 | `sensor.sunsynk_overall_state_text` | Converts the raw inverter state code into readable text |
-| `binary_sensor.sunsynk_inverter_grid_connected` | Marks grid connected when grid voltage is above 100 V |
+| `binary_sensor.sunsynk_grid_voltage_connected` | Optional voltage-based grid connected helper; keep the ESPHome `binary_sensor.sunsynk_inverter_grid_connected` entity for dashboard cards |
 
 Template block:
 
@@ -389,8 +397,8 @@ template:
           }.get(code, 'Unknown (' ~ code ~ ')') }}
 
   - binary_sensor:
-      - name: "Sunsynk Inverter Grid Connected"
-        unique_id: sunsynk_inverter_grid_connected
+      - name: "Sunsynk Grid Voltage Connected"
+        unique_id: sunsynk_grid_voltage_connected
         device_class: connectivity
         state: >
           {{ states('sensor.sunsynk_inverter_grid_voltage') | float(0) > 100 }}
@@ -411,7 +419,7 @@ Install the matching custom card through HACS before pasting the YAML into a Lov
 
 | File | Purpose |
 | --- | --- |
-| `sunsynk-inverter.yaml` | Main ESPHome configuration |
+| `sunsynk-inverter-v4.yaml` | Main ESPHome configuration |
 | `secrets.example.yaml` | Example ESPHome secrets file |
 | `dashboard-cards/sunsynk-power-flow-card.yaml` | Detailed Sunsynk dashboard card example |
 | `dashboard-cards/power-flow-card-plus.yaml` | Generic power-flow dashboard card example |
@@ -419,7 +427,7 @@ Install the matching custom card through HACS before pasting the YAML into a Lov
 
 ## Setup
 
-1. Copy `sunsynk-inverter.yaml` into ESPHome.
+1. Copy `sunsynk-inverter-v4.yaml` into ESPHome.
 2. Create a `secrets.yaml` based on `secrets.example.yaml`.
 3. Update Wi-Fi, MQTT, API, OTA, fallback AP, static IP, and web server secrets.
 4. Update the static IP secrets or remove the `manual_ip` block from the YAML.
