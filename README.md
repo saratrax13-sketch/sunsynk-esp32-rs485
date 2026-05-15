@@ -49,7 +49,17 @@ This inverter behaved badly when ESPHome grouped too many nearby Modbus register
 
 To make reads stable, this version uses `force_new_range: true` broadly. That makes ESPHome read most items in separate requests. It is slower, but it avoids corrupt grouped reads.
 
-v4.7 uses a faster 5s scan interval with stable 750ms RS485 request spacing. Earlier tests showed that 600ms could bring back shifted/corrupt values, while very conservative v4.2 timing was too slow in live use. It also filters impossible live values so dashboards keep the last valid reading instead of publishing corrupt spikes.
+v4.14 uses a faster 5s scan interval with stable 750ms RS485 request spacing. Earlier tests showed that 600ms could bring back shifted/corrupt values, while very conservative v4.2 timing was too slow in live use. It also filters impossible live values so dashboards keep the last valid reading instead of publishing corrupt spikes.
+
+PV1/PV2 power values are checked against their voltage x current values and configurable PV string/total-solar limits. This rejects obvious shifted-register reads, such as PV power briefly showing another register value while the PV voltage and current indicate a different output.
+
+Battery, grid, inverter, load, UPS/essential, and calculated power sensors also use sanity filters. v4.11 added a PV current cross-check, invalid state-code filtering, non-negative inverter power filtering, and two-sample confirmation for sudden high load/UPS readings.
+
+v4.12 also confirms writable setting state reads before publishing them. This prevents a single shifted Modbus response from making `Use Timer`, `Solar Export`, `Grid Charge Enabled`, `Priority Load`, or `Load Limit` appear to change in Home Assistant when the inverter was not physically switched.
+
+v4.13 fixes the PV current compile substitution and applies the same confirmation pattern to `Battery Shutdown Capacity`, `Battery Restart Capacity`, and `Battery Low Capacity` number reads.
+
+v4.14 adds confirmed reads to `Prog1 Charge` through `Prog6 Charge`, preventing shifted values such as `100` from producing select mapping errors.
 
 The generator/AUX power sensor uses a consecutive-sample confirmation filter. This lets a real generator appear automatically once it produces sustained valid power, while one-off shifted Modbus values are ignored when no generator is connected.
 
@@ -425,7 +435,7 @@ Install the matching custom card through HACS before pasting the YAML into a Lov
 
 | File | Purpose |
 | --- | --- |
-| `sunsynk-inverter-v4.7.yaml` | Main ESPHome configuration |
+| `sunsynk-inverter-v4.14.yaml` | Main ESPHome configuration |
 | `secrets.example.yaml` | Example ESPHome secrets file |
 | `dashboard-cards/sunsynk-power-flow-card.yaml` | Detailed Sunsynk dashboard card example |
 | `dashboard-cards/power-flow-card-plus.yaml` | Generic power-flow dashboard card example |
@@ -433,7 +443,7 @@ Install the matching custom card through HACS before pasting the YAML into a Lov
 
 ## Setup
 
-1. Copy `sunsynk-inverter-v4.7.yaml` into ESPHome.
+1. Copy `sunsynk-inverter-v4.14.yaml` into ESPHome.
 2. Create a `secrets.yaml` based on `secrets.example.yaml`.
 3. Update Wi-Fi, MQTT, API, OTA, fallback AP, static IP, and web server secrets.
 4. Update the static IP secrets or remove the `manual_ip` block from the YAML.
