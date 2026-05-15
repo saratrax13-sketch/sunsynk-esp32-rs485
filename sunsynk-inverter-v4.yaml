@@ -1,6 +1,7 @@
 ﻿substitutions:
   device_name: sunsynk-inverter
   friendly_name: Sunsynk Inverter
+  device_description: "ESP32 RS485 bridge for monitoring and controlling a Sunsynk inverter via ESPHome, MQTT, and Home Assistant."
   tx_pin: GPIO16
   rx_pin: GPIO17
   flow_control_pin: GPIO18
@@ -38,6 +39,7 @@
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
+  comment: ${device_description}
 
 # ESP32 board and framework choice.
 esp32:
