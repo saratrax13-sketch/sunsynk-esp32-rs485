@@ -6,9 +6,12 @@
   rx_pin: GPIO17
   flow_control_pin: GPIO18
   generator_min_valid_power_w: "1600"
+  modbus_update_interval: 10s
+  modbus_command_throttle: 500ms
+  modbus_send_wait_time: 500ms
 
-# File version: v4 - isolated reads
-# Date updated: 2026-05-11
+# File version: v4.1 - isolated reads with slower RS485 timing
+# Date updated: 2026-05-15
 #
 # Why this version exists:
 # - Earlier versions could read and write, but grouped Modbus range reads sometimes
@@ -25,13 +28,15 @@
 # - MQTT retain is explicitly disabled on writable switches/selects/numbers.
 #   Retained writable state messages can be replayed by MQTT/Home Assistant
 #   after reconnects and look like real changes.
+# - v4.1 slows RS485 request pacing after logs still showed shifted/corrupt
+#   values such as impossible battery SOC and PV voltage readings.
 #
 # Polling notes:
-# - The main Modbus controller update_interval is 5s.
-# - No skip_updates means the item is checked every scan, roughly every 5s.
-# - skip_updates: 11 means the item updates every 12 scans, roughly 60s.
-# - skip_updates: 59 means roughly every 5 minutes.
-# - skip_updates: 119 means roughly every 10 minutes.
+# - The main Modbus controller update_interval is ${modbus_update_interval}.
+# - No skip_updates means the item is checked every scan.
+# - skip_updates: 11 means the item updates every 12 scans.
+# - skip_updates: 59 means the item updates every 60 scans.
+# - skip_updates: 119 means the item updates every 120 scans.
 # - Modbus is serial, so values update one after another, not all at exactly the
 #   same instant.
 
@@ -46,6 +51,9 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf
+    advanced:
+      minimum_chip_revision: "3.0"
+      sram1_as_iram: true
 
 # Logging levels. Modbus internals are kept quiet unless troubleshooting is needed.
 logger:
@@ -119,7 +127,7 @@ modbus:
   - id: modbus1
     uart_id: mod_uart
     flow_control_pin: ${flow_control_pin}
-    send_wait_time: 250ms
+    send_wait_time: ${modbus_send_wait_time}
 
 # Sunsynk inverter Modbus slave.
 # address: 1 must match the inverter Modbus ID.
@@ -129,8 +137,8 @@ modbus_controller:
     address: 1
     modbus_id: modbus1
     setup_priority: -10
-    update_interval: 5s
-    command_throttle: 200ms
+    update_interval: ${modbus_update_interval}
+    command_throttle: ${modbus_command_throttle}
     offline_skip_updates: 3
 
 # Sensors below are mostly Modbus holding-register reads.

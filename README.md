@@ -47,23 +47,27 @@ This inverter behaved badly when ESPHome grouped too many nearby Modbus register
 - Timer/program values showing as large invalid values
 - `not enough data for value` errors in the ESPHome logs
 
-To make reads stable, this version uses `force_new_range: true` broadly. That makes ESPHome read most items in separate requests. It is a bit slower, but it avoids corrupt grouped reads.
+To make reads stable, this version uses `force_new_range: true` broadly. That makes ESPHome read most items in separate requests. It is slower, but it avoids corrupt grouped reads.
 
-The main scan interval is:
+v4.1 also slows the RS485 request pacing because the inverter still showed shifted/corrupt values with faster request spacing.
+
+The current Modbus timing is controlled near the top of the YAML:
 
 ```yaml
-update_interval: 5s
+modbus_update_interval: 10s
+modbus_command_throttle: 500ms
+modbus_send_wait_time: 500ms
 ```
 
 Slower-changing values use `skip_updates`:
 
 | Setting | Approximate polling interval |
 | --- | --- |
-| no `skip_updates` | 5 seconds |
-| `skip_updates: 5` | 30 seconds |
-| `skip_updates: 11` | 60 seconds |
-| `skip_updates: 59` | 5 minutes |
-| `skip_updates: 119` | 10 minutes |
+| no `skip_updates` | 10 seconds |
+| `skip_updates: 5` | 60 seconds |
+| `skip_updates: 11` | 2 minutes |
+| `skip_updates: 59` | 10 minutes |
+| `skip_updates: 119` | 20 minutes |
 
 Modbus is serial, so the values are read one after another. Dashboard values can therefore be a few seconds apart during one full scan.
 
