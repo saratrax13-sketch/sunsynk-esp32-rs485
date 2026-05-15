@@ -16,10 +16,10 @@
   load_power_spike_confirm_w: "5000"
   writable_state_confirm_samples: "2"
   modbus_update_interval: 5s
-  modbus_command_throttle: 750ms
-  modbus_send_wait_time: 750ms
+  modbus_command_throttle: 250ms
+  modbus_send_wait_time: 250ms
 
-# File version: v4.14 - confirmed program charge reads
+# File version: v4.15 - Waveshare RS485 3.3V faster pacing
 # Date updated: 2026-05-15
 #
 # Why this version exists:
@@ -69,6 +69,9 @@
 #   confirmation pattern to writable battery capacity number reads.
 # - v4.14 extends confirmed reads to Prog1-Prog6 Charge selects so shifted
 #   values such as 100 do not produce mapping errors or false state changes.
+# - v4.15 lowers Modbus request spacing to 250ms after replacing the marginal
+#   MAX485 module with a Waveshare 3.3V RS485 board and confirming clean logs
+#   with no Modbus, mapping, or corrupt state-code errors.
 #
 # Polling notes:
 # - The main Modbus controller update_interval is ${modbus_update_interval}.
