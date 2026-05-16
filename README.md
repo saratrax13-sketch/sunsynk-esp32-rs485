@@ -126,6 +126,35 @@ If you previously used retained writable topics, clear the retained MQTT message
 
 ## Hardware Wiring
 
+## RS485 Adapter Recommendation
+
+This project was originally tested with an inexpensive MAX485 RS485-to-TTL module. It worked, but it was much less tolerant of faster Modbus timing and showed shifted/corrupt reads unless the request spacing was slowed down.
+
+The current recommended adapter is the Waveshare RS485 Board (3.3V), based on a 3.3V RS485 transceiver such as the SP3485. After changing to the Waveshare board, the inverter ran cleanly at:
+
+```yaml
+modbus_update_interval: 5s
+modbus_command_throttle: 100ms
+modbus_send_wait_time: 250ms
+```
+
+| Adapter | Result in this project | Recommendation |
+| --- | --- | --- |
+| Cheap MAX485-style RS485-to-TTL module | Worked only with slower timing; more prone to shifted/corrupt Modbus reads | Avoid for this Sunsynk setup unless you keep conservative timing |
+| Waveshare RS485 Board (3.3V) | Clean logs at 100ms command throttle and 250ms send wait | Recommended |
+
+Waveshare wiring used for this project:
+
+| Waveshare RS485 Board (3.3V) | ESP32 / Sunsynk |
+| --- | --- |
+| VCC | ESP32 3V3 |
+| GND | ESP32 GND, ideally also Sunsynk RS485 GND |
+| DI | ESP32 GPIO16 TX |
+| RO | ESP32 GPIO17 RX |
+| RSE | ESP32 GPIO18 flow control |
+| A | Sunsynk RJ45 pin 2 A / D+ |
+| B | Sunsynk RJ45 pin 1 B / D- |
+
 ### ESP32 To RS485 Converter
 
 The YAML uses these pins:
