@@ -5,22 +5,22 @@
   tx_pin: GPIO16
   rx_pin: GPIO17
   flow_control_pin: GPIO18
-  generator_min_valid_power_w: "0"
+  generator_min_valid_power_w: "300"
   generator_max_valid_power_w: "10000"
-  generator_confirm_samples: "1"
-  pv_string_max_power_w: "20000"
-  total_solar_max_power_w: "30000"
-  pv_current_min_when_power_a: "0"
-  inverter_power_max_w: "20000"
-  load_power_max_w: "20000"
-  load_power_spike_confirm_w: "20000"
+  generator_confirm_samples: "3"
+  pv_string_max_power_w: "5500"
+  total_solar_max_power_w: "11000"
+  pv_current_min_when_power_a: "1"
+  inverter_power_max_w: "10000"
+  load_power_max_w: "10000"
+  load_power_spike_confirm_w: "5000"
   writable_state_confirm_samples: "3"
   modbus_update_interval: 5s
   modbus_command_throttle: 100ms
   modbus_send_wait_time: 250ms
 
-# File version: v4.16-drift-test - loosened validation thresholds
-# Date updated: 2026-05-15
+# File version: v4.18 - ESPHome-owned dashboard helpers
+# Date updated: 2026-05-16
 #
 # Why this version exists:
 # - Earlier versions could read and write, but grouped Modbus range reads sometimes
@@ -73,8 +73,15 @@
 #   MAX485 module with a Waveshare 3.3V RS485 board and confirming clean logs
 #   with no Modbus, mapping, or corrupt state-code errors.
 # - v4.16-drift-test loosens the defensive validation thresholds so the
-#   Waveshare RS485 hardware can be tested for raw drift/corruption. This file
-#   is for short diagnostic runs only; use v4.15 for normal dashboards.
+#   Waveshare RS485 hardware can be tested for raw drift/corruption.
+# - v4.17 promotes the clean Waveshare daylight test to daily-driver timing:
+#   5s scans, 100ms command throttle, and 250ms send wait. It restores normal
+#   validation guardrails, keeps writable state confirmation at 3 samples, and
+#   adds a calculated Grid CT Current Estimate so current can be compared with
+#   Grid CT Power without misusing the raw Grid Current register.
+# - v4.18 moves the remaining Sunsynk dashboard helpers from Home Assistant
+#   templates into ESPHome: Home Power Final, Non Essential Power, and Overall
+#   State Text. Home Assistant can now be presentation only for these values.
 #
 # Polling notes:
 # - The main Modbus controller update_interval is ${modbus_update_interval}.
@@ -434,6 +441,7 @@ sensor:
   - platform: modbus_controller
     modbus_controller_id: sunsynk
     name: "Grid Voltage"
+    id: grid_voltage
     address: 150
     force_new_range: true
     register_type: holding
@@ -529,6 +537,24 @@ sensor:
       - lambda: |-
           if (x >= -12000.0f && x <= 12000.0f) return x;
           return {};
+
+  # Calculated: Grid CT Current Estimate.
+  # The raw Grid Current register does not scale directly with Grid CT Power on
+  # this inverter. This helper estimates CT branch current from signed CT power
+  # and grid voltage, so it is better suited for comparing against grid flow.
+  - platform: template
+    name: "Grid CT Current Estimate"
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (isnan(id(grid_ct_power).state) || isnan(id(grid_voltage).state))
+        return {};
+      if (id(grid_voltage).state < 180.0f)
+        return {};
+      return fabsf(id(grid_ct_power).state) / id(grid_voltage).state;
 
   # Inverter AC output values.
   # These describe what the inverter is doing on the AC/output side.
@@ -744,6 +770,41 @@ sensor:
       if (essential <= 12000.0f) return essential;
       return {};
 
+  # Calculated: Home Power Final.
+  # Card-friendly total home load. Kept positive for dashboard cards.
+  - platform: template
+    name: "Home Power Final"
+    id: home_power_final
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (isnan(id(load_power).state))
+        return {};
+      return fabsf(id(load_power).state);
+
+  # Calculated: Non Essential Power.
+  # Card-friendly estimate: total load minus UPS/essential output.
+  - platform: template
+    name: "Non Essential Power"
+    id: non_essential_power
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (isnan(id(load_power).state) || isnan(id(ups_essential_power).state))
+        return {};
+      const float total = fabsf(id(load_power).state);
+      const float essential = fabsf(id(ups_essential_power).state);
+      const float non_essential = total - essential;
+      if (non_essential < 0.0f) return 0.0f;
+      if (non_essential <= 12000.0f) return non_essential;
+      return {};
+
   # Temperatures.
   # These are slow-changing, so skip_updates: 11 polls them roughly once a minute.
   - platform: modbus_controller
@@ -911,12 +972,26 @@ text_sensor:
   - platform: modbus_controller
     modbus_controller_id: sunsynk
     name: "Overall State"
+    id: overall_state_raw
     address: 59
     force_new_range: true
     register_type: holding
     raw_encode: HEXBYTES
     response_size: 2
     skip_updates: 11
+
+  - platform: template
+    name: "Overall State Text"
+    update_interval: 60s
+    lambda: |-
+      const std::string raw = id(overall_state_raw).state;
+      if (raw == "0000") return {"Standby"};
+      if (raw == "0001") return {"Self-test"};
+      if (raw == "0002") return {"Normal"};
+      if (raw == "0003") return {"Alarm"};
+      if (raw == "0004") return {"Fault"};
+      if (raw.empty()) return {};
+      return {"Unknown (" + raw + ")"};
 
 # Binary status sensors.
 # Grid Connected reads register 194 bit 0. It is slower than live power values

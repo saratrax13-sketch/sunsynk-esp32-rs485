@@ -2,6 +2,12 @@
 
 ESPHome configuration for monitoring and controlling a Sunsynk 8kW single-phase inverter over RS485 using an ESP32 and Home Assistant.
 
+Current active file:
+
+```text
+sunsynk-inverter-v4.18.yaml
+```
+
 This project was built around:
 
 - Sunsynk 8kW single-phase inverter
@@ -23,9 +29,10 @@ It provides:
 - Grid voltage, current, frequency, CT power, and grid power
 - Inverter voltage, current, frequency, and inverter power
 - Load power and UPS/essential load power
+- Calculated total solar, home power, non-essential power, and essential load values for dashboard cards
 - Generator/AUX power when the AUX port is configured as generator input
 - Daily PV, battery charge/discharge, grid import/export, and load energy totals
-- Inverter state code and raw state text
+- Inverter state code, raw state text, and friendly state text
 - ESP32 diagnostic entities for Wi-Fi/IP/status/firmware version
 - Writable inverter settings:
   - Solar Export
@@ -49,7 +56,7 @@ This inverter behaved badly when ESPHome grouped too many nearby Modbus register
 
 To make reads stable, this version uses `force_new_range: true` broadly. That makes ESPHome read most items in separate requests. It is slower, but it avoids corrupt grouped reads.
 
-v4.14 uses a faster 5s scan interval with stable 750ms RS485 request spacing. Earlier tests showed that 600ms could bring back shifted/corrupt values, while very conservative v4.2 timing was too slow in live use. It also filters impossible live values so dashboards keep the last valid reading instead of publishing corrupt spikes.
+v4.14 used a faster 5s scan interval with stable 750ms RS485 request spacing. Earlier tests showed that 600ms could bring back shifted/corrupt values on the older RS485 board, while very conservative v4.2 timing was too slow in live use. It also filters impossible live values so dashboards keep the last valid reading instead of publishing corrupt spikes.
 
 PV1/PV2 power values are checked against their voltage x current values and configurable PV string/total-solar limits. This rejects obvious shifted-register reads, such as PV power briefly showing another register value while the PV voltage and current indicate a different output.
 
@@ -61,25 +68,33 @@ v4.13 fixes the PV current compile substitution and applies the same confirmatio
 
 v4.14 adds confirmed reads to `Prog1 Charge` through `Prog6 Charge`, preventing shifted values such as `100` from producing select mapping errors.
 
+v4.15 moved to a Waveshare 3.3V RS485 board and 250ms request spacing after the cheap MAX485 module proved less tolerant.
+
+v4.16 was a short-lived drift-test file with intentionally loose validation limits. It is not intended for normal dashboards.
+
+v4.17 promoted the clean Waveshare test timing to the daily-driver settings: 5s scans, 100ms command throttle, and 250ms send wait. It also added `Grid CT Current Estimate`, a calculated current equivalent for `Grid CT Power`.
+
+v4.18 moves the remaining Home Assistant dashboard helpers into ESPHome. Home Assistant no longer needs Sunsynk template sensors in `configuration.yaml` for this setup.
+
 The generator/AUX power sensor uses a consecutive-sample confirmation filter. This lets a real generator appear automatically once it produces sustained valid power, while one-off shifted Modbus values are ignored when no generator is connected.
 
 The current Modbus timing is controlled near the top of the YAML:
 
 ```yaml
 modbus_update_interval: 5s
-modbus_command_throttle: 750ms
-modbus_send_wait_time: 750ms
+modbus_command_throttle: 100ms
+modbus_send_wait_time: 250ms
 ```
 
 Slower-changing values use `skip_updates`:
 
 | Setting | Approximate polling interval |
 | --- | --- |
-| no `skip_updates` | 10 seconds |
-| `skip_updates: 5` | 60 seconds |
-| `skip_updates: 11` | 2 minutes |
-| `skip_updates: 59` | 10 minutes |
-| `skip_updates: 119` | 20 minutes |
+| no `skip_updates` | 5 seconds |
+| `skip_updates: 5` | 30 seconds |
+| `skip_updates: 11` | 60 seconds |
+| `skip_updates: 59` | 5 minutes |
+| `skip_updates: 119` | 10 minutes |
 
 Modbus is serial, so the values are read one after another. Dashboard values can therefore be a few seconds apart during one full scan.
 
@@ -110,6 +125,35 @@ on the writable inverter controls, including:
 If you previously used retained writable topics, clear the retained MQTT messages from your broker.
 
 ## Hardware Wiring
+
+## RS485 Adapter Recommendation
+
+This project was originally tested with an inexpensive MAX485 RS485-to-TTL module. It worked, but it was much less tolerant of faster Modbus timing and showed shifted/corrupt reads unless the request spacing was slowed down.
+
+The current recommended adapter is the Waveshare RS485 Board (3.3V), based on a 3.3V RS485 transceiver such as the SP3485. After changing to the Waveshare board, the inverter ran cleanly at:
+
+```yaml
+modbus_update_interval: 5s
+modbus_command_throttle: 100ms
+modbus_send_wait_time: 250ms
+```
+
+| Adapter | Result in this project | Recommendation |
+| --- | --- | --- |
+| Cheap MAX485-style RS485-to-TTL module | Worked only with slower timing; more prone to shifted/corrupt Modbus reads | Avoid for this Sunsynk setup unless you keep conservative timing |
+| Waveshare RS485 Board (3.3V) | Clean logs at 100ms command throttle and 250ms send wait | Recommended |
+
+Waveshare wiring used for this project:
+
+| Waveshare RS485 Board (3.3V) | ESP32 / Sunsynk |
+| --- | --- |
+| VCC | ESP32 3V3 |
+| GND | ESP32 GND, ideally also Sunsynk RS485 GND |
+| DI | ESP32 GPIO16 TX |
+| RO | ESP32 GPIO17 RX |
+| RSE | ESP32 GPIO18 flow control |
+| A | Sunsynk RJ45 pin 2 A / D+ |
+| B | Sunsynk RJ45 pin 1 B / D- |
 
 ### ESP32 To RS485 Converter
 
@@ -328,97 +372,44 @@ modbus_controller:
   address: 1
 ```
 
-## Home Assistant Templates
+## Home Assistant Configuration
 
-These templates go in Home Assistant's `configuration.yaml`, normally at:
+With `sunsynk-inverter-v4.18.yaml`, Sunsynk dashboard helper values are created by ESPHome. Home Assistant no longer needs a Sunsynk `template:` block for this project.
+
+The included example file is:
 
 ```text
-/config/configuration.yaml
+home-assistant-configuration.yaml
 ```
 
-If you already have a top-level `template:` section, do not create a second one. Merge the `- sensor:` and `- binary_sensor:` blocks into the existing `template:` section.
+Minimal Home Assistant example:
 
-After saving, go to **Developer Tools > YAML > Check Configuration**. Then reload Template Entities or restart Home Assistant.
+```yaml
+# Loads default set of integrations. Do not remove.
+default_config:
 
-What these templates create:
+# Load frontend themes from the themes folder.
+frontend:
+  themes: !include_dir_merge_named themes
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+```
+
+ESPHome now provides the dashboard helper entities directly:
 
 | Entity | Purpose |
 | --- | --- |
-| `sensor.sunsynk_total_pv_power` | Adds PV1 and PV2 power together |
-| `sensor.sunsynk_ups_essential_final` | Clean UPS/essential load value from the inverter UPS register |
-| `sensor.sunsynk_non_essential_final` | Calculates non-essential load as total load minus UPS/essential load |
-| `sensor.sunsynk_home_power_final` | Total home/load power for dashboard cards |
-| `sensor.sunsynk_overall_state_text` | Converts the raw inverter state code into readable text |
-| `binary_sensor.sunsynk_grid_voltage_connected` | Optional voltage-based grid connected helper; keep the ESPHome `binary_sensor.sunsynk_inverter_grid_connected` entity for dashboard cards |
+| `sensor.sunsynk_inverter_total_solar_power` | Adds PV1 and PV2 power together |
+| `sensor.sunsynk_inverter_home_power_final` | Card-friendly total home/load power |
+| `sensor.sunsynk_inverter_non_essential_power` | Calculates non-essential load as total load minus UPS/essential load |
+| `sensor.sunsynk_inverter_ups_essential_power` | UPS/essential load register from the inverter |
+| `text_sensor.sunsynk_inverter_overall_state_text` | Converts raw inverter state into readable text |
+| `binary_sensor.sunsynk_inverter_grid_connected` | Grid connected status from the inverter |
+| `sensor.sunsynk_inverter_grid_ct_current_estimate` | Estimated CT current from `abs(Grid CT Power) / Grid Voltage` |
 
-Template block:
-
-```yaml
-template:
-  - sensor:
-      - name: "Sunsynk Total PV Power"
-        unique_id: sunsynk_total_pv_power
-        unit_of_measurement: "W"
-        device_class: power
-        state_class: measurement
-        state: >
-          {{
-            (
-              states('sensor.sunsynk_inverter_pv1_power') | float(0) +
-              states('sensor.sunsynk_inverter_pv2_power') | float(0)
-            ) | round(0)
-          }}
-
-      - name: "Sunsynk UPS Essential Final"
-        unique_id: sunsynk_ups_essential_final
-        unit_of_measurement: "W"
-        device_class: power
-        state_class: measurement
-        state: >
-          {{
-            states('sensor.sunsynk_inverter_ups_essential_power') | float(0) | abs | round(0)
-          }}
-
-      - name: "Sunsynk Non Essential Final"
-        unique_id: sunsynk_non_essential_final
-        unit_of_measurement: "W"
-        device_class: power
-        state_class: measurement
-        state: >
-          {% set total = states('sensor.sunsynk_inverter_load_power') | float(0) | abs %}
-          {% set essential = states('sensor.sunsynk_inverter_ups_essential_power') | float(0) | abs %}
-          {{ [total - essential, 0] | max | round(0) }}
-
-      - name: "Sunsynk Home Power Final"
-        unique_id: sunsynk_home_power_final
-        unit_of_measurement: "W"
-        device_class: power
-        state_class: measurement
-        state: >
-          {{
-            states('sensor.sunsynk_inverter_load_power') | float(0) | abs | round(0)
-          }}
-
-      - name: "Sunsynk Overall State Text"
-        unique_id: sunsynk_overall_state_text
-        state: >
-          {% set raw = states('sensor.sunsynk_inverter_overall_state') %}
-          {% set code = raw | int(base=16, default=0) %}
-          {{ {
-            0: 'Standby',
-            1: 'Self-test',
-            2: 'Normal',
-            3: 'Alarm',
-            4: 'Fault'
-          }.get(code, 'Unknown (' ~ code ~ ')') }}
-
-  - binary_sensor:
-      - name: "Sunsynk Grid Voltage Connected"
-        unique_id: sunsynk_grid_voltage_connected
-        device_class: connectivity
-        state: >
-          {{ states('sensor.sunsynk_inverter_grid_voltage') | float(0) > 100 }}
-```
+After flashing v4.18 and confirming these entities exist, remove the old Sunsynk template helpers from Home Assistant to avoid duplicate/legacy entities in cards.
 
 ## Dashboard Cards
 
@@ -429,13 +420,16 @@ Two dashboard examples are included:
 | `dashboard-cards/sunsynk-power-flow-card.yaml` | `custom:sunsynk-power-flow-card` | Best for a Sunsynk-style detailed inverter diagram |
 | `dashboard-cards/power-flow-card-plus.yaml` | `custom:power-flow-card-plus` | Simpler generic power-flow card |
 
-Install the matching custom card through HACS before pasting the YAML into a Lovelace dashboard. If Home Assistant adds `_2` to any entity ID, update the card YAML to match your actual entity IDs.
+Install the matching custom card through HACS before pasting the YAML into a Lovelace dashboard. The card examples are written for v4.18 ESPHome-owned entities, so they do not depend on Home Assistant template helpers. If Home Assistant adds `_2` to any entity ID, update the card YAML to match your actual entity IDs.
 
 ## Files
 
 | File | Purpose |
 | --- | --- |
-| `sunsynk-inverter-v4.14.yaml` | Main ESPHome configuration |
+| `sunsynk-inverter-v4.18.yaml` | Current main ESPHome configuration |
+| `sunsynk-inverter-v4.17.yaml` | Previous daily-driver version before ESPHome-owned dashboard helpers |
+| `sunsynk-inverter-v4.16-drift-test.yaml` | Diagnostic drift-test version with loose validation limits; not for normal dashboards |
+| `home-assistant-configuration.yaml` | Minimal Home Assistant configuration example with no Sunsynk templates |
 | `secrets.example.yaml` | Example ESPHome secrets file |
 | `dashboard-cards/sunsynk-power-flow-card.yaml` | Detailed Sunsynk dashboard card example |
 | `dashboard-cards/power-flow-card-plus.yaml` | Generic power-flow dashboard card example |
@@ -443,15 +437,16 @@ Install the matching custom card through HACS before pasting the YAML into a Lov
 
 ## Setup
 
-1. Copy `sunsynk-inverter-v4.14.yaml` into ESPHome.
+1. Copy `sunsynk-inverter-v4.18.yaml` into ESPHome.
 2. Create a `secrets.yaml` based on `secrets.example.yaml`.
 3. Update Wi-Fi, MQTT, API, OTA, fallback AP, static IP, and web server secrets.
 4. Update the static IP secrets or remove the `manual_ip` block from the YAML.
 5. Check your board type and GPIO wiring.
 6. Compile and flash from ESPHome Builder.
-7. Add the Home Assistant templates from this README to `configuration.yaml`.
-8. Add one of the dashboard cards from `dashboard-cards`.
-9. Watch logs for sane values.
+7. Confirm the v4.18 helper entities appear in Home Assistant.
+8. Remove old Sunsynk template helpers from Home Assistant if you previously used them.
+9. Add one of the dashboard cards from `dashboard-cards`.
+10. Watch logs for sane values.
 
 Useful log checks:
 
