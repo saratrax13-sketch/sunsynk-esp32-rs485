@@ -3,34 +3,76 @@ title: Sunsynk Power Flow
 entities:
   grid:
     entity: sensor.sunsynk_inverter_grid_ct_power
+    name: Grid
+    icon: mdi:transmission-tower
     invert_state: false
+    display_state: one_way
+    color_icon: color_dynamically
+    color_circle: color_dynamically
+    secondary_info:
+      entity: sensor.sunsynk_inverter_day_grid_import
+      unit_of_measurement: kWh
+      icon: mdi:transmission-tower-import
+      decimals: 1
   solar:
-    entity: sensor.sunsynk_total_pv_power
+    entity: sensor.sunsynk_inverter_total_solar_power
+    name: Solar
+    icon: mdi:solar-power
+    display_zero: true
+    display_zero_state: true
+    secondary_info:
+      entity: sensor.sunsynk_inverter_day_pv_energy
+      unit_of_measurement: kWh
+      icon: mdi:solar-power
+      decimals: 1
   battery:
     entity: sensor.sunsynk_inverter_battery_power
     state_of_charge: sensor.sunsynk_inverter_battery_soc
+    name: Battery
+    icon: mdi:battery
     invert_state: false
+    display_state: one_way
+    color_icon: color_dynamically
+    color_circle: color_dynamically
+    state_of_charge_decimals: 0
+    secondary_info:
+      entity: sensor.sunsynk_inverter_battery_voltage
+      unit_of_measurement: V
+      icon: mdi:sine-wave
+      decimals: 1
   home:
-    entity: sensor.sunsynk_home_power_final
+    entity: sensor.sunsynk_inverter_home_power_final
+    name: Home
+    icon: mdi:home
     override_state: true
+    subtract_individual: false
   individual:
-    - entity: sensor.sunsynk_ups_essential_final
+    - entity: sensor.sunsynk_inverter_ups_essential_power
       name: Essential
       icon: mdi:home-lightning-bolt
       display_zero: true
-    - entity: sensor.sunsynk_non_essential_final
+      display_zero_state: true
+      decimals: 0
+    - entity: sensor.sunsynk_inverter_non_essential_power
       name: Non-essential
       icon: mdi:home-alert
       display_zero: true
+      display_zero_state: true
+      decimals: 0
     - entity: sensor.sunsynk_inverter_generator_power
       name: Generator
       icon: mdi:engine
       display_zero: false
+      display_zero_state: false
+      decimals: 0
 clickable_entities: true
-display_zero_lines: true
+display_zero_lines:
+  mode: show
 use_new_flow_rate_model: true
 min_flow_rate: 0.75
 max_flow_rate: 6
 max_expected_power: 8000
+min_expected_power: 10
 base_decimals: 0
 kilo_decimals: 2
+sort_individual_devices: false

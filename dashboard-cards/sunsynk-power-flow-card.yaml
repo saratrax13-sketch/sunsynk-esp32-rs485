@@ -1,20 +1,75 @@
 type: custom:sunsynk-power-flow-card
-cardstyle: lite
-wide: false
-large_font: false
 title: Sunsynk Power Flow
 title_size: 22px
+cardstyle: full
+wide: false
+large_font: false
+show_solar: true
+show_battery: true
+show_grid: true
+center_no_grid: false
+card_height: 480px
 card_width: 100%
-card_height: 620px
+decimal_places: 2
+decimal_places_energy: 1
+dynamic_line_width: true
+max_line_width: 4
+min_line_width: 1
+
+inverter:
+  modern: true
+  colour: "#9e9e9e"
+  autarky: power
+  model: sunsynk
+  auto_scale: true
+  three_phase: false
+  navigate: ""
+  label_autarky: ""
+  label_ratio: ""
 
 battery:
-  energy: 15960
-  shutdown_soc: 20
+  energy: 10000
+  shutdown_soc: 5
   show_daily: true
+  auto_scale: false
+  show_absolute: false
+  dynamic_colour: true
+  linear_gradient: true
+  hide_soc: true
+  show_remaining_energy: true
+  remaining_energy_to_shutdown: true
+  invert_power: false
+
+battery2:
+  energy: 0
+  shutdown_soc: 20
+  soc_end_of_charge: 100
+  invert_power: false
+  hide_soc: false
+  colour: "#ffc0cb"
+  show_remaining_energy: true
+  remaining_energy_to_shutdown: false
+  show_absolute: false
+  auto_scale: true
+  dynamic_colour: true
+  linear_gradient: true
+  animate: true
+  path_threshold: 100
+  navigate: ""
+  invert_flow: false
 
 solar:
-  mppts: 2
   show_daily: true
+  mppts: 2
+  pv1_name: Garage
+  pv2_name: House
+  auto_scale: true
+  display_mode: 1
+  dynamic_colour: true
+  pv1_max_power: 4550
+  pv2_max_power: 4550
+  efficiency: 2
+  off_threshold: 10
 
 load:
   show_aux: true
@@ -29,47 +84,33 @@ grid:
   show_daily_sell: true
 
 entities:
-  solarday_108: sensor.sunsynk_inverter_day_pv_energy
   pv1_power_186: sensor.sunsynk_inverter_pv1_power
   pv2_power_187: sensor.sunsynk_inverter_pv2_power
-  pv3_power_188: none
-  pv4_power_189: none
-  pv1_v_109: sensor.sunsynk_inverter_pv1_voltage
-  pv1_i_110: sensor.sunsynk_inverter_pv1_current
-  pv2_v_111: sensor.sunsynk_inverter_pv2_voltage
-  pv2_i_112: sensor.sunsynk_inverter_pv2_current
-  pv3_v_113: none
-  pv3_i_114: none
-  pv4_v_115: none
-  pv4_i_116: none
+  pv1_voltage_109: sensor.sunsynk_inverter_pv1_voltage
+  pv1_current_110: sensor.sunsynk_inverter_pv1_current
+  pv2_voltage_111: sensor.sunsynk_inverter_pv2_voltage
+  pv2_current_112: sensor.sunsynk_inverter_pv2_current
+  day_pv_energy_108: sensor.sunsynk_inverter_day_pv_energy
 
-  batchargeday_70: sensor.sunsynk_inverter_day_battery_charge
-  batdischargeday_71: sensor.sunsynk_inverter_day_battery_discharge
+  battery_power_190: sensor.sunsynk_inverter_battery_power
+  battery_current_191: sensor.sunsynk_inverter_battery_current
   battery_voltage_183: sensor.sunsynk_inverter_battery_voltage
   battery_soc_184: sensor.sunsynk_inverter_battery_soc
-  battery_out_190: sensor.sunsynk_inverter_battery_power
-  battery_current_191: sensor.sunsynk_inverter_battery_current
+  day_battery_charge_70: sensor.sunsynk_inverter_day_battery_charge
+  day_battery_discharge_71: sensor.sunsynk_inverter_day_battery_discharge
 
-  grid_buy_day_76: sensor.sunsynk_inverter_day_grid_import
-  grid_sell_day_77: sensor.sunsynk_inverter_day_grid_export
-  grid_external_power_172: sensor.sunsynk_inverter_grid_ct_power
-  inverter_load_grid_169: sensor.sunsynk_inverter_grid_l1_power
   grid_ct_power_172: sensor.sunsynk_inverter_grid_ct_power
-  grid_power_169: sensor.sunsynk_inverter_grid_l1_power
+  grid_power_169: sensor.sunsynk_inverter_grid_power
   grid_connected_status_194: binary_sensor.sunsynk_inverter_grid_connected
+  day_grid_import_76: sensor.sunsynk_inverter_day_grid_import
+  day_grid_export_77: sensor.sunsynk_inverter_day_grid_export
 
-  loadday_84: sensor.sunsynk_inverter_day_load_energy
-  essential_power: sensor.sunsynk_ups_essential_final
-  nonessential_power: sensor.sunsynk_non_essential_final
-  aux_power_166: sensor.sunsynk_inverter_generator_power
-
-  inverter_grid_voltage_154: sensor.sunsynk_inverter_inverter_voltage
-  inverter_load_freq_192: sensor.sunsynk_inverter_load_frequency
-  inverter_out_164: sensor.sunsynk_inverter_inverter_current
-  inverter_out_175: sensor.sunsynk_inverter_inverter_power
   inverter_power_175: sensor.sunsynk_inverter_inverter_power
   inverter_voltage_154: sensor.sunsynk_inverter_inverter_voltage
   inverter_current_164: sensor.sunsynk_inverter_inverter_current
   load_frequency_192: sensor.sunsynk_inverter_load_frequency
-  grid_status_194: binary_sensor.sunsynk_inverter_grid_connected
-  inverter_status_59: sensor.sunsynk_overall_state_text
+  inverter_status_59: text_sensor.sunsynk_inverter_overall_state_text
+
+  essential_power: sensor.sunsynk_inverter_ups_essential_power
+  nonessential_power: sensor.sunsynk_inverter_non_essential_power
+  aux_power_166: sensor.sunsynk_inverter_generator_power
