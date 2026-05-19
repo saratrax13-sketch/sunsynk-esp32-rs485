@@ -5,7 +5,7 @@ ESPHome configuration for monitoring and controlling a Sunsynk 8kW single-phase 
 Current active file:
 
 ```text
-sunsynk-inverter-v4.18.yaml
+sunsynk-inverter-v4.19-readonly-registers.yaml
 ```
 
 This project was built around:
@@ -33,6 +33,7 @@ It provides:
 - Generator/AUX power when the AUX port is configured as generator input
 - Daily PV, battery charge/discharge, grid import/export, and load energy totals
 - Inverter state code, raw state text, and friendly state text
+- Read-only battery mode and voltage-threshold diagnostics for Lithium versus AGM/lead operation
 - ESP32 diagnostic entities for Wi-Fi/IP/status/firmware version
 - Writable inverter settings:
   - Solar Export
@@ -75,6 +76,8 @@ v4.16 was a short-lived drift-test file with intentionally loose validation limi
 v4.17 promoted the clean Waveshare test timing to the daily-driver settings: 5s scans, 100ms command throttle, and 250ms send wait. It also added `Grid CT Current Estimate`, a calculated current equivalent for `Grid CT Power`.
 
 v4.18 moves the remaining Home Assistant dashboard helpers into ESPHome. Home Assistant no longer needs Sunsynk template sensors in `configuration.yaml` for this setup.
+
+v4.19 adds read-only diagnostic mirrors for the battery control mode, voltage/capacity operating mode, AGM/Lithium voltage thresholds, generator/grid charge start thresholds, smart-load thresholds, and time-of-use voltage targets. It does not change the existing writable controls.
 
 The generator/AUX power sensor uses a consecutive-sample confirmation filter. This lets a real generator appear automatically once it produces sustained valid power, while one-off shifted Modbus values are ignored when no generator is connected.
 
@@ -374,7 +377,7 @@ modbus_controller:
 
 ## Home Assistant Configuration
 
-With `sunsynk-inverter-v4.18.yaml`, Sunsynk dashboard helper values are created by ESPHome. Home Assistant no longer needs a Sunsynk `template:` block for this project.
+With `sunsynk-inverter-v4.19-readonly-registers.yaml`, Sunsynk dashboard helper values are created by ESPHome. Home Assistant no longer needs a Sunsynk `template:` block for this project.
 
 The included example file is:
 
@@ -409,7 +412,7 @@ ESPHome now provides the dashboard helper entities directly:
 | `binary_sensor.sunsynk_inverter_grid_connected` | Grid connected status from the inverter |
 | `sensor.sunsynk_inverter_grid_ct_current_estimate` | Estimated CT current from `abs(Grid CT Power) / Grid Voltage` |
 
-After flashing v4.18 and confirming these entities exist, remove the old Sunsynk template helpers from Home Assistant to avoid duplicate/legacy entities in cards.
+After flashing v4.19 and confirming these entities exist, remove the old Sunsynk template helpers from Home Assistant to avoid duplicate/legacy entities in cards.
 
 ## Dashboard Cards
 
@@ -420,13 +423,14 @@ Two dashboard examples are included:
 | `dashboard-cards/sunsynk-power-flow-card.yaml` | `custom:sunsynk-power-flow-card` | Best for a Sunsynk-style detailed inverter diagram |
 | `dashboard-cards/power-flow-card-plus.yaml` | `custom:power-flow-card-plus` | Simpler generic power-flow card |
 
-Install the matching custom card through HACS before pasting the YAML into a Lovelace dashboard. The card examples are written for v4.18 ESPHome-owned entities, so they do not depend on Home Assistant template helpers. If Home Assistant adds `_2` to any entity ID, update the card YAML to match your actual entity IDs.
+Install the matching custom card through HACS before pasting the YAML into a Lovelace dashboard. The card examples are written for v4.18+ ESPHome-owned entities, so they do not depend on Home Assistant template helpers. If Home Assistant adds `_2` to any entity ID, update the card YAML to match your actual entity IDs.
 
 ## Files
 
 | File | Purpose |
 | --- | --- |
-| `sunsynk-inverter-v4.18.yaml` | Current main ESPHome configuration |
+| `sunsynk-inverter-v4.19-readonly-registers.yaml` | Current main ESPHome configuration with read-only battery/AGM diagnostics |
+| `sunsynk-inverter-v4.18.yaml` | Previous daily-driver version before read-only register mirrors |
 | `sunsynk-inverter-v4.17.yaml` | Previous daily-driver version before ESPHome-owned dashboard helpers |
 | `sunsynk-inverter-v4.16-drift-test.yaml` | Diagnostic drift-test version with loose validation limits; not for normal dashboards |
 | `home-assistant-configuration.yaml` | Minimal Home Assistant configuration example with no Sunsynk templates |
@@ -437,13 +441,13 @@ Install the matching custom card through HACS before pasting the YAML into a Lov
 
 ## Setup
 
-1. Copy `sunsynk-inverter-v4.18.yaml` into ESPHome.
+1. Copy `sunsynk-inverter-v4.19-readonly-registers.yaml` into ESPHome.
 2. Create a `secrets.yaml` based on `secrets.example.yaml`.
 3. Update Wi-Fi, MQTT, API, OTA, fallback AP, static IP, and web server secrets.
 4. Update the static IP secrets or remove the `manual_ip` block from the YAML.
 5. Check your board type and GPIO wiring.
 6. Compile and flash from ESPHome Builder.
-7. Confirm the v4.18 helper entities appear in Home Assistant.
+7. Confirm the v4.19 helper and read-only diagnostic entities appear in Home Assistant.
 8. Remove old Sunsynk template helpers from Home Assistant if you previously used them.
 9. Add one of the dashboard cards from `dashboard-cards`.
 10. Watch logs for sane values.
