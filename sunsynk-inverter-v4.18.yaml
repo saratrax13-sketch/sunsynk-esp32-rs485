@@ -1,4 +1,4 @@
-﻿substitutions:
+substitutions:
   device_name: sunsynk-inverter
   friendly_name: Sunsynk Inverter
   device_description: "ESP32 RS485 bridge for monitoring and controlling a Sunsynk inverter via ESPHome, MQTT, and Home Assistant."
@@ -19,8 +19,8 @@
   modbus_command_throttle: 100ms
   modbus_send_wait_time: 250ms
 
-# File version: v4.18 - ESPHome-owned dashboard helpers
-# Date updated: 2026-05-16
+# File version: v4.19-readonly-registers - Battery mode and AGM voltage diagnostics
+# Date updated: 2026-05-19
 #
 # Why this version exists:
 # - Earlier versions could read and write, but grouped Modbus range reads sometimes
@@ -82,6 +82,10 @@
 # - v4.18 moves the remaining Sunsynk dashboard helpers from Home Assistant
 #   templates into ESPHome: Home Power Final, Non Essential Power, and Overall
 #   State Text. Home Assistant can now be presentation only for these values.
+# - v4.19 adds read-only register mirrors for battery control mode, voltage/
+#   capacity operating mode, AGM/Lithium voltage thresholds, generator/grid
+#   charge thresholds, smart-load thresholds, and time-of-use voltage targets.
+#   These are diagnostic only and do not change the existing write behavior.
 #
 # Polling notes:
 # - The main Modbus controller update_interval is ${modbus_update_interval}.
@@ -306,6 +310,512 @@ sensor:
       - offset: -100.0
       - lambda: |-
           if (x >= -20.0f && x <= 100.0f) return x;
+          return {};
+
+  # Read-only battery setting diagnostics.
+  # These expose the registers that change meaning when the inverter is moved
+  # between Lithium percentage-based operation and AGM/lead voltage-based
+  # operation. Existing writable controls are left unchanged in this version.
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Control Mode Code"
+    id: battery_control_mode_code
+    address: 200
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 1.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Equalisation Voltage"
+    address: 201
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x >= 38.0f && x <= 61.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Absorption Voltage"
+    address: 202
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x >= 38.0f && x <= 61.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Float Voltage"
+    address: 203
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x >= 38.0f && x <= 61.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Rated Capacity"
+    address: 204
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "Ah"
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 2000.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery LCD Lithium Capacity"
+    address: 205
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "%"
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 100.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Operating Mode Code"
+    id: battery_operating_mode_code
+    address: 213
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 2.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Shutdown Voltage"
+    address: 220
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x >= 38.0f && x <= 61.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Restart Voltage"
+    address: 221
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x >= 38.0f && x <= 61.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Battery Low Voltage"
+    address: 222
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x >= 38.0f && x <= 61.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Generator Max Operating Time"
+    address: 223
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "h"
+    state_class: measurement
+    accuracy_decimals: 1
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.1
+      - lambda: |-
+          if (x >= 0.0f && x <= 24.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Generator Cooling Time"
+    address: 224
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "h"
+    state_class: measurement
+    accuracy_decimals: 1
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.1
+      - lambda: |-
+          if (x >= 0.0f && x <= 24.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Generator Charge Start Voltage"
+    address: 225
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x == 0.0f || (x >= 38.0f && x <= 63.0f)) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Generator Charge Start Capacity"
+    address: 226
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "%"
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 100.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Generator Charge Current Setting"
+    address: 227
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 185.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid Charge Start Voltage"
+    address: 228
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x == 0.0f || (x >= 38.0f && x <= 63.0f)) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid Charge Start Capacity"
+    address: 229
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "%"
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 100.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Grid Charge Current Setting"
+    address: 230
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 185.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Smart Load Off Voltage"
+    address: 236
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x >= 38.0f && x <= 63.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Smart Load Off Capacity"
+    address: 237
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "%"
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 100.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Smart Load On Voltage"
+    address: 238
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x >= 38.0f && x <= 63.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Smart Load On Capacity"
+    address: 239
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "%"
+    state_class: measurement
+    skip_updates: 59
+    entity_category: diagnostic
+    filters:
+      - lambda: |-
+          if (x >= 0.0f && x <= 100.0f) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog1 Voltage"
+    address: 262
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 119
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x == 0.0f || (x >= 38.0f && x <= 63.0f)) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog2 Voltage"
+    address: 263
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 119
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x == 0.0f || (x >= 38.0f && x <= 63.0f)) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog3 Voltage"
+    address: 264
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 119
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x == 0.0f || (x >= 38.0f && x <= 63.0f)) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog4 Voltage"
+    address: 265
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 119
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x == 0.0f || (x >= 38.0f && x <= 63.0f)) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog5 Voltage"
+    address: 266
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 119
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x == 0.0f || (x >= 38.0f && x <= 63.0f)) return x;
+          return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: sunsynk
+    name: "Prog6 Voltage"
+    address: 267
+    force_new_range: true
+    register_type: holding
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    skip_updates: 119
+    entity_category: diagnostic
+    filters:
+      - multiply: 0.01
+      - lambda: |-
+          if (x == 0.0f || (x >= 38.0f && x <= 63.0f)) return x;
           return {};
 
   # Solar PV live values.
@@ -992,6 +1502,29 @@ text_sensor:
       if (raw == "0004") return {"Fault"};
       if (raw.empty()) return {};
       return {"Unknown (" + raw + ")"};
+
+  - platform: template
+    name: "Battery Control Mode"
+    update_interval: 60s
+    entity_category: diagnostic
+    lambda: |-
+      if (isnan(id(battery_control_mode_code).state)) return {};
+      const int mode = (int) id(battery_control_mode_code).state;
+      if (mode == 0) return {"Lead / AGM / Gel"};
+      if (mode == 1) return {"Lithium"};
+      return {"Unknown (" + std::to_string(mode) + ")"};
+
+  - platform: template
+    name: "Battery Operating Mode"
+    update_interval: 60s
+    entity_category: diagnostic
+    lambda: |-
+      if (isnan(id(battery_operating_mode_code).state)) return {};
+      const int mode = (int) id(battery_operating_mode_code).state;
+      if (mode == 0) return {"Voltage"};
+      if (mode == 1) return {"Capacity"};
+      if (mode == 2) return {"No Battery"};
+      return {"Unknown (" + std::to_string(mode) + ")"};
 
 # Binary status sensors.
 # Grid Connected reads register 194 bit 0. It is slower than live power values
