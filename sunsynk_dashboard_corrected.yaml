@@ -1,0 +1,424 @@
+type: vertical-stack
+cards:
+  - type: entities
+    title: Sunsynk Edit Mode
+    show_header_toggle: false
+    entities:
+      - entity: input_boolean.sunsynk_settings_edit_mode
+        name: Enable Editing
+  - type: conditional
+    conditions:
+      - entity: input_boolean.sunsynk_settings_edit_mode
+        state: "on"
+    card:
+      type: vertical-stack
+      cards:
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-entity-card
+              entity: select.sunsynk_inverter_prog1_time
+              fill_container: true
+              secondary_info: none
+              primary_info: state
+              icon: mdi:numeric-1
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-entity-card
+                  entity: select.sunsynk_inverter_prog1_charge
+                  name: " "
+                  fill_container: false
+                  icon_type: none
+                - type: custom:mushroom-entity-card
+                  entity: number.sunsynk_inverter_prog1_power
+                  name: " "
+                  icon_type: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog1_capacity
+              name: " "
+              needle: false
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-entity-card
+              entity: select.sunsynk_inverter_prog2_time
+              fill_container: true
+              secondary_info: none
+              primary_info: state
+              icon: mdi:numeric-2
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-entity-card
+                  entity: select.sunsynk_inverter_prog2_charge
+                  name: " "
+                  fill_container: false
+                  icon_type: none
+                - type: custom:mushroom-entity-card
+                  entity: number.sunsynk_inverter_prog2_power
+                  name: " "
+                  icon_type: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog2_capacity
+              name: " "
+              needle: false
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-entity-card
+              entity: select.sunsynk_inverter_prog3_time
+              fill_container: true
+              secondary_info: none
+              primary_info: state
+              icon: mdi:numeric-3
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-entity-card
+                  entity: select.sunsynk_inverter_prog3_charge
+                  name: " "
+                  fill_container: false
+                  icon_type: none
+                - type: custom:mushroom-entity-card
+                  entity: number.sunsynk_inverter_prog3_power
+                  name: " "
+                  icon_type: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog3_capacity
+              name: " "
+              needle: false
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-entity-card
+              entity: select.sunsynk_inverter_prog4_time
+              fill_container: true
+              secondary_info: none
+              primary_info: state
+              icon: mdi:numeric-4
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-entity-card
+                  entity: select.sunsynk_inverter_prog4_charge
+                  name: " "
+                  fill_container: false
+                  icon_type: none
+                - type: custom:mushroom-entity-card
+                  entity: number.sunsynk_inverter_prog4_power
+                  name: " "
+                  icon_type: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog4_capacity
+              name: " "
+              needle: false
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-entity-card
+              entity: select.sunsynk_inverter_prog5_time
+              fill_container: true
+              secondary_info: none
+              primary_info: state
+              icon: mdi:numeric-5
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-entity-card
+                  entity: select.sunsynk_inverter_prog5_charge
+                  name: " "
+                  fill_container: false
+                  icon_type: none
+                - type: custom:mushroom-entity-card
+                  entity: number.sunsynk_inverter_prog5_power
+                  name: " "
+                  icon_type: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog5_capacity
+              name: " "
+              needle: false
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-entity-card
+              entity: select.sunsynk_inverter_prog6_time
+              fill_container: true
+              secondary_info: none
+              primary_info: state
+              icon: mdi:numeric-6
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-entity-card
+                  entity: select.sunsynk_inverter_prog6_charge
+                  name: " "
+                  fill_container: false
+                  icon_type: none
+                - type: custom:mushroom-entity-card
+                  entity: number.sunsynk_inverter_prog6_power
+                  name: " "
+                  icon_type: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog6_capacity
+              name: " "
+              needle: false
+        - type: entities
+          title: Inverter Settings
+          show_header_toggle: false
+          entities:
+            - entity: switch.sunsynk_inverter_use_timer
+              name: Use Timer
+            - entity: switch.sunsynk_inverter_solar_export
+              name: Solar Export
+            - entity: switch.sunsynk_inverter_priority_load
+              name: Priority Load
+            - entity: switch.sunsynk_inverter_grid_charge_enabled
+              name: Grid Charge Enabled
+            - entity: select.sunsynk_inverter_load_limit
+              name: Load Limit
+            - type: divider
+            - entity: number.sunsynk_inverter_battery_shutdown_capacity
+              name: Battery Shutdown %
+            - entity: number.sunsynk_inverter_battery_restart_capacity
+              name: Battery Restart %
+            - entity: number.sunsynk_inverter_battery_low_capacity
+              name: Battery Low %
+  - type: conditional
+    conditions:
+      - entity: input_boolean.sunsynk_settings_edit_mode
+        state: "off"
+    card:
+      type: vertical-stack
+      cards:
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-template-card
+              entity: select.sunsynk_inverter_prog1_time
+              primary: "{{ states('select.sunsynk_inverter_prog1_time') }}"
+              secondary: none
+              icon: mdi:numeric-1
+              tap_action:
+                action: none
+              hold_action:
+                action: none
+              double_tap_action:
+                action: none
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('select.sunsynk_inverter_prog1_charge') }}"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('number.sunsynk_inverter_prog1_power') }} W"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog1_capacity
+              name: " "
+              needle: false
+              tap_action:
+                action: none
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-template-card
+              entity: select.sunsynk_inverter_prog2_time
+              primary: "{{ states('select.sunsynk_inverter_prog2_time') }}"
+              secondary: none
+              icon: mdi:numeric-2
+              tap_action:
+                action: none
+              hold_action:
+                action: none
+              double_tap_action:
+                action: none
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('select.sunsynk_inverter_prog2_charge') }}"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('number.sunsynk_inverter_prog2_power') }} W"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog2_capacity
+              name: " "
+              needle: false
+              tap_action:
+                action: none
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-template-card
+              entity: select.sunsynk_inverter_prog3_time
+              primary: "{{ states('select.sunsynk_inverter_prog3_time') }}"
+              secondary: none
+              icon: mdi:numeric-3
+              tap_action:
+                action: none
+              hold_action:
+                action: none
+              double_tap_action:
+                action: none
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('select.sunsynk_inverter_prog3_charge') }}"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('number.sunsynk_inverter_prog3_power') }} W"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog3_capacity
+              name: " "
+              needle: false
+              tap_action:
+                action: none
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-template-card
+              entity: select.sunsynk_inverter_prog4_time
+              primary: "{{ states('select.sunsynk_inverter_prog4_time') }}"
+              secondary: none
+              icon: mdi:numeric-4
+              tap_action:
+                action: none
+              hold_action:
+                action: none
+              double_tap_action:
+                action: none
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('select.sunsynk_inverter_prog4_charge') }}"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('number.sunsynk_inverter_prog4_power') }} W"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog4_capacity
+              name: " "
+              needle: false
+              tap_action:
+                action: none
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-template-card
+              entity: select.sunsynk_inverter_prog5_time
+              primary: "{{ states('select.sunsynk_inverter_prog5_time') }}"
+              secondary: none
+              icon: mdi:numeric-5
+              tap_action:
+                action: none
+              hold_action:
+                action: none
+              double_tap_action:
+                action: none
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('select.sunsynk_inverter_prog5_charge') }}"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('number.sunsynk_inverter_prog5_power') }} W"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog5_capacity
+              name: " "
+              needle: false
+              tap_action:
+                action: none
+        - type: horizontal-stack
+          cards:
+            - type: custom:mushroom-template-card
+              entity: select.sunsynk_inverter_prog6_time
+              primary: "{{ states('select.sunsynk_inverter_prog6_time') }}"
+              secondary: none
+              icon: mdi:numeric-6
+              tap_action:
+                action: none
+              hold_action:
+                action: none
+              double_tap_action:
+                action: none
+            - type: vertical-stack
+              cards:
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('select.sunsynk_inverter_prog6_charge') }}"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+                - type: custom:mushroom-template-card
+                  primary: "{{ states('number.sunsynk_inverter_prog6_power') }} W"
+                  tap_action:
+                    action: none
+                  hold_action:
+                    action: none
+                  double_tap_action:
+                    action: none
+            - type: gauge
+              entity: number.sunsynk_inverter_prog6_capacity
+              name: " "
+              needle: false
+              tap_action:
+                action: none
+        - type: entities
+          title: Inverter Settings
+          show_header_toggle: false
+          entities:
+            - entity: switch.sunsynk_inverter_use_timer
+              name: Use Timer
+            - entity: switch.sunsynk_inverter_solar_export
+              name: Solar Export
+            - entity: switch.sunsynk_inverter_priority_load
+              name: Priority Load
+            - entity: switch.sunsynk_inverter_grid_charge_enabled
+              name: Grid Charge Enabled
+            - entity: select.sunsynk_inverter_load_limit
+              name: Load Limit
+            - type: divider
+            - entity: number.sunsynk_inverter_battery_shutdown_capacity
+              name: Battery Shutdown %
+            - entity: number.sunsynk_inverter_battery_restart_capacity
+              name: Battery Restart %
+            - entity: number.sunsynk_inverter_battery_low_capacity
+              name: Battery Low %
